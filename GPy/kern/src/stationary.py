@@ -11,6 +11,7 @@ from ... import util
 from ...util.config import config # for assesing whether to use cython
 from paramz.caching import Cache_this
 from paramz.transformations import Logexp
+import inspect
 
 try:
     from . import stationary_cython
@@ -56,7 +57,7 @@ class Stationary(Kern):
     def __init__(self, input_dim, variance, lengthscale, ARD, active_dims, name, useGPU=False):
         super(Stationary, self).__init__(input_dim, active_dims, name,useGPU=useGPU)
         self.ARD = ARD
-        if not ARD:
+        if not self.ARD:
             if lengthscale is None:
                 lengthscale = np.ones(1)
             else:
@@ -81,14 +82,126 @@ class Stationary(Kern):
     def dK_dr(self, r):
         raise NotImplementedError("implement derivative of the covariance function wrt r to use this class")
 
+    def dr_dX(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        dist = np.rollaxis(X[:,None,:]-X2[None,:,:],2,0)
+        rinv = self._inv_dist(X,X2)
+        rinv[rinv == 0.] -= self.variance
+        lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+	return rinv[None,:,:]*dist*lengthscale2inv[:,None,None]
+
+    def dr_dX2(self, X, X2):
+        return -self.dr_dX(X, X2)
+
+    def dr2_dXdX2(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        dist = np.rollaxis(X[:,None,:] - X2[None,:,:],2,0)
+        rinv = self._inv_dist(X,X2)
+        rinv3 = rinv**3
+        rinv[rinv == 0.] -= self.variance
+        lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+        I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        return rinv3[None,None,:,:]*dist[:,None,:,:]*lengthscale2inv[:,None,None,None]*dist[None,:,:,:]*lengthscale2inv[None,:,None,None]-I*rinv[None,None,:,:]*lengthscale2inv[None,:,None,None]
+
+    def dr3_dXdXdX2(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+	dist = np.rollaxis(X[:,None,:] - X2[None,:,:], 2,0)
+	rinv =  self._inv_dist(X,X2)
+	rinv3 = rinv**3
+	rinv5 = rinv**5
+	lengthscale2inv = np.ones((X.shape[1]), dtype=np.float64)/(self.lengthscale**2)
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return (-3.0*rinv5[None,None,None,:,:]*dist[:,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]
+		+ I[:,:,None,:,:]*rinv3[None,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*dist[None,None,:,:,:]*lengthscale2inv[None,None,:,None,None]
+		+ I[:,None,:,:,:]*rinv3[None,None,None,:,:]*dist[None,:,None,:,:]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]
+		+ I[None,:,:,:,:]*rinv3[None,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*dist[:,None,None,:,:]*lengthscale2inv[:,None,None,None,None])
+    
+    def dr3_dX2dXdX2(self, X, X2):
+	return -1.0*self.dr3_dXdXdX2(X,X2)
+
+    def dr4_dXdX2dXdX2(self, X, X2=None):
+	if X2 is None:
+	    X2 = X
+	dist = np.rollaxis(X[:,None,:] - X2[None,:,:], 2,0)
+	rinv =  self._inv_dist(X,X2)
+	rinv3 = rinv**3
+	rinv5 = rinv**5
+	rinv7 = rinv**5
+	lengthscale2inv = np.ones((X.shape[1]), dtype=np.float64)/(self.lengthscale**2)
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return (-15.0*rinv7*dist[:,None,None,None,:,:]*dist[None,:,None,None,:,:]*dist[None,None,:,None,:,:]*dist[None,None,None,:,:,:]*lengthscale2inv[:,None,None,None,None,None]*lengthscale2inv[None,:,None,None,None,None]*lengthscale2inv[None,None,:,None,None,None]*lengthscale2inv[None,None,None,:,None,None]
+	    +3.0*rinv5[None,None,None,None,:,:]*(
+	     I[None,:,:,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*dist[None,None,None,:,:,:]*lengthscale2inv[None,None,None,:,None,None]*dist[:,None,None,None,:,:]*lengthscale2inv[:,None,None,None,None,None]
+	    +I[None,:,None,:,:,:]*dist[None,None,:,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*lengthscale2inv[None,None,None,:,None,None]*dist[:,None,None,None,:,:]*lengthscale2inv[:,None,None,None,None,None] +I[:,:,None,None,:,:]*dist[None,None,:,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*dist[None,None,None,:,:,:]*lengthscale2inv[None,None,None,:,None,None]*lengthscale2inv[:,None,None,None,None,None]
+	    +I[:,None,:,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*dist[None,None,None,:,:,:]*lengthscale2inv[None,None,None,:,None,None]*dist[None,:,None,None,:,:]*lengthscale2inv[None,:,None,None,None,None]
+	    +I[:,None,None,:,:,:]*dist[None,None,:,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*lengthscale2inv[None,None,None,:,None,None]*dist[None,:,None,None,:,:]*lengthscale2inv[None,:,None,None,None,None]
+	    +I[None,None,:,:,:,:]*lengthscale2inv[None,None,:,None,None,None]*dist[:,None,None,None,:,:]*lengthscale2inv[:,None,None,None,None,None]*dist[None,:,None,None,:,:]*lengthscale2inv[None,:,None,None,None,None])
+	    -I[:,None,:,None,:,:]*I[None,:,None,:,:,:]*rinv3[None,None,None,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*lengthscale2inv[None,None,None,:,None,None]
+	    -I[:,None,None,:,:,:]*I[None,:,:,None,:,:]*rinv3[None,None,None,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*lengthscale2inv[None,None,None,:,None,None]
+	    -I[None,None,:,:,:,:]*I[:,:,None,None,:,:]*rinv3[None,None,None,None,:,:]*lengthscale2inv[None,None,:,None,None,None]*lengthscale2inv[:,None,None,None,None,None])
+        
+
+    def dr3_dlengthscaledXdX2(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+	dist = np.rollaxis(X[:,None,:] - X2[None,:,:], 2,0)
+	rinv =  self._inv_dist(X,X2)
+	rinv3 = rinv**3
+	rinv5 = rinv**5
+	dist2 = dist**2
+	lengthscale2inv = 1.0/self.lengthscale**2
+	lengthscale3inv = 1.0/self.lengthscale**3
+	lengthscale4inv = 1.0/self.lengthscale**4
+	lengthscale5inv = 1.0/self.lengthscale**5
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	if not self.ARD:
+	    return (-1.0*rinv3[None,None,:,:]*dist[:,None,:,:]*dist[None,:,:,:]*lengthscale5inv
+		+I*rinv[None,None,:,:]*lengthscale3inv)
+	else:
+	    return (3.0*rinv5[None,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*dist2[:,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*lengthscale3inv[:,None,None,None,None]
+		-2.0*I[:,:,None,:,:]*rinv3[None,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*lengthscale3inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]
+		-2.0*I[:,None,:,:,:]*rinv3[None,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*lengthscale2inv[None,:,None,None,None]*lengthscale3inv[None,None,:,None,None]
+		-1.0*I[None,:,:,:,:]*rinv3[None,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*dist2[:,None,None,:,:]*lengthscale3inv[:,None,None,None,None]
+		+2.0*I[:,:,None,:,:]*I[:,None,:,:,:]*rinv[None,None,None,:,:]*lengthscale3inv[None,:,None,None,None])
+
+
+    def dr2_dlengthscaledX(self, X, X2):
+        rinv = self._inv_dist(X, X2)
+        rinv3 = rinv**3
+        dist = np.rollaxis(X[:,None,:] - X2[None,:,:],2,0)
+        dist2 = dist**2
+        invlengthscale = 1/self.lengthscale
+        I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return rinv3[None,:,:]*dist*dist2.sum(axis=0)*(invlengthscale[:,None,None]**5) -2.0*dist*rinv[None,:,:]*(invlengthscale[:,None,None]**3) if (not self.ARD) else rinv3[None,None,:,:]*dist[:,None,:,:]*(invlengthscale[None,:,None,None]**2)*dist2[:, None,:,:]*(invlengthscale[:,None,None,None]**3) -2.0*I*rinv[None,None,:,:]*dist[None,:,:,:]*(invlengthscale[None,:,None,None]**3)
+
+    def dr2_dlengthscaledX2(self, X, X2):
+        return -1.0*self.dr2_dlengthscaledX(X, X2)
+
     @Cache_this(limit=3, ignore_args=())
     def dK2_drdr(self, r):
         raise NotImplementedError("implement second derivative of covariance wrt r to use this method")
+
+    def dK3_drdrdr(self, r):
+        raise NotImplementedError("implement third derivative of covariance wrt r to use this method")
+
+    def dK2_dvariancedr(self, r):
+        raise NotImplementedError("implement third derivative of covariance wrt r to use this method")
+
+    def dK3_dvariancedrdr(self, r):
+        raise NotImplementedError("implement third derivative of covariance wrt r to use this method")
 
     @Cache_this(limit=3, ignore_args=())
     def dK2_drdr_diag(self):
         "Second order derivative of K in r_{i,i}. The diagonal entries are always zero, so we do not give it here."
         raise NotImplementedError("implement second derivative of covariance wrt r_diag to use this method")
+
+    def dr_dlengthscale(self, X, X2):
+        rinv = self._inv_dist(X, X2)
+        dist = X[:,None,:]-X2[None,:,:]
+        return -1.0*self._scaled_dist(X, X2)/self.lengthscale if (not self.ARD) else np.rollaxis(-1.0*(rinv[:,:,None]*(dist**2)/(self.lengthscale**3)),2,0)
 
     @Cache_this(limit=3, ignore_args=())
     def K(self, X, X2=None):
@@ -114,6 +227,168 @@ class Stationary(Kern):
     def dK2_drdr_via_X(self, X, X2):
         #a convenience function, so we can cache dK_dr
         return self.dK2_drdr(self._scaled_dist(X, X2))
+
+    @Cache_this(limit=3, ignore_args=())
+    def dK_dX(self, X, X2):
+        """
+        compute the partial derivative of K wrt X in all dimensions
+        If X is [NxD], X2 is [MxD], returned matrix is [NxMxD]
+        """
+        dK = np.zeros([X.shape[0], X2.shape[0], self.input_dim], dtype=np.float64)
+        inv_dist = self._inv_dist(X, X2)
+        dK_dr = self.dK_dr_via_X(X, X2)
+        dr_dx = self.dr_dX(X, X2)
+        return dK_dr[None,:,:]*dr_dx
+
+    def dK_dX2(self, X, X2):
+        return -1.0*self.dK_dX(X, X2)
+    
+    def dK_dlengthscale(self, X, X2):
+	r = self._scaled_dist(X, X2)
+	dk_dr = self.dK_dr(r)
+	dr_dlengthscale = self.dr_dlengthscale(X,X2)
+	return dk_dr*dr_dlengthscale if not self.ARD else dk_dr[None,:,:]*dr_dlengthscale
+      
+    def dK_dlengthscale_v2(self, dL_dK, X, X2=None):
+        dL_dr = self.dK_dr_via_X(X, X2) * dL_dK
+        if self.ARD:
+            tmp = dL_dr*self._inv_dist(X, X2)
+            if X2 is None: X2 = X
+            if config.getboolean('cython', 'working'):
+                return self._lengthscale_grads_cython(tmp, X, X2)
+            else:
+                return self._lengthscale_grads_pure(tmp, X, X2)
+        else:
+            r = self._scaled_dist(X, X2)
+            return -np.sum(dL_dr*r)/self.lengthscale
+	    
+    def dK2_dvariancedX(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        dk2_dvariancedr = self.dK2_dvariancedr(r)
+        dr_dx = self.dr_dX(X, X2)
+        return dk2_dvariancedr*dr_dx
+    
+    def dK2_dvariancedX2(self, X, X2):
+	r = self._scaled_dist(X, X2)
+        dk2_dvariancedr = self.dK2_dvariancedr(r)
+        dr_dx2 = self.dr_dX2(X, X2)
+        return dk2_dvariancedr*dr_dx2
+    
+    def dK2_dlengthscaledX(self, X, X2):
+	r = self._scaled_dist(X, X2)
+	dr_dx = self.dr_dX(X, X2)
+	dk_dr = self.dK_dr_via_X(X, X2)
+	dk2_drdr = self.dK2_drdr(r)
+        dr_dlengthscale = self.dr_dlengthscale(X, X2)
+        dr2_dlengthscaledx = self.dr2_dlengthscaledX(X, X2)
+	return (dk2_drdr[None,None,:,:]*dr_dx[None,:,:,:]*dr_dlengthscale[:,None,:,:] + dk_dr*dr2_dlengthscaledx) if self.ARD else (dk2_drdr*dr_dx*dr_dlengthscale[None,:,:] + dk_dr*dr2_dlengthscaledx)
+
+    def dK2_dlengthscaledX2(self, X, X2):
+	r = self._scaled_dist(X, X2)
+	dr_dx2 = self.dr_dX2(X, X2)
+	dk_dr = self.dK_dr_via_X(X, X2)
+	dk2_drdr = self.dK2_drdr(r)
+        dr_dlengthscale = self.dr_dlengthscale(X, X2)
+        dr2_dlengthscaledx2 = self.dr2_dlengthscaledX2(X, X2)
+	return (dk2_drdr[None,None,:,:]*dr_dx2[None,:,:,:]*dr_dlengthscale[:,None,:,:] + dk_dr*dr2_dlengthscaledx2) if self.ARD else (dk2_drdr*dr_dx2*dr_dlengthscale[None,:,:] + dk_dr*dr2_dlengthscaledx2)
+    
+    @Cache_this(limit=3, ignore_args=())
+    def dK2_dXdX2(self, X, X2):
+        """
+        Compute the partial derivatives of K wrt X and X2 in all dimensions
+        For X [NxD], X2 [MxD], returned matrix is [NxMxDXD]
+        This function is basically a wrapper for gradients_XX-function, but it changes
+        order of axes.
+        """
+        return self.gradients_XX(np.ones([X.shape[0], X2.shape[0]]), X, X2).swapaxes(0,2).swapaxes(1,3)
+      
+    def dK3_dvariancedXdX2(self, X, X2):
+	r = self._scaled_dist(X, X2)
+	dk2_dvariancedr = self.dK2_dvariancedr(r)
+	dr_dx = self.dr_dX(X, X2)
+	dr_dx2 = self.dr_dX2(X,X2)
+	dr2_dxdx2 = self.dr2_dXdX2(X, X2)
+	dk3_dvariancedrdr = self.dK3_dvariancedrdr(r)
+	dk2_dvariancedr = self.dK2_dvariancedr(r)
+	tmp = dk2_dvariancedr[None,None,:,:]*dr2_dxdx2[:,:,:,:]
+	tmp[:,:,(self._inv_dist(X, X2)) == 0.] += dr2_dxdx2[:,:,(self._inv_dist(X, X2)) == 0.]
+	return tmp + dk3_dvariancedrdr[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:]
+
+    def dK3_dlengthscaledXdX2(self, X, X2):
+	r = self._scaled_dist(X, X2)
+	invd = self._inv_dist(X, X2)
+	K = self.K_of_r(r)
+	dk_dr = self.dK_dr(r)
+	dk2_drdr = self.dK2_drdr(r)
+	dk3_drdrdr = self.dK3_drdrdr(r)
+	dr_dx = self.dr_dX(X,X2)
+	dr_dx2 = self.dr_dX2(X,X2)
+	dr2_dxdx2 = self.dr2_dXdX2(X,X2)
+	dr_dlengthscale = self.dr_dlengthscale(X, X2)
+	dr2_dlengthscaledx = self.dr2_dlengthscaledX(X, X2)
+	dr2_dlengthscaledx2 = self.dr2_dlengthscaledX2(X, X2)
+	dr3_dlengthscaledxdx2 = self.dr3_dlengthscaledXdX2(X, X2)
+	I = (np.ones((X.shape[0], X.shape[0], X.shape[1], X.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	if not self.ARD:
+	    g = (dk2_drdr[None,None,:,:]*dr_dlengthscale[None,None,:,:]*dr2_dxdx2 + dk_dr[None,None,:,:]*dr3_dlengthscaledxdx2
+	    +dk3_drdrdr[None,None,:,:]*dr_dlengthscale[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:] 
+	    +dk2_drdr[None,None,:,:]*dr2_dlengthscaledx[:,None,:,:]*dr_dx2[None,:,:,:]
+	    +dk2_drdr[None,None,:,:]*dr_dx[:,None,:,:]*dr2_dlengthscaledx2[None,:,:,:])
+	    g[:,:,(invd == 0.)] = (-2.0*I[:,:,:,:]*K[None,None,:,:]/(self.lengthscale**3))[:,:,( invd == 0.)]
+	else:
+	    g = (dk2_drdr[None,None,None,:,:]*dr_dlengthscale[:,None,None,:,:]*dr2_dxdx2[None,:,:,:,:] + dk_dr[None,None,None,:,:]*dr3_dlengthscaledxdx2
+	    +dk3_drdrdr[None,None,None,:,:]*dr_dlengthscale[:,None,None,:,:]*dr_dx[None,:,None,:,:]*dr_dx2[None,None,:,:,:]
+	    +dk2_drdr[None,None,None,:,:]*dr2_dlengthscaledx[:,:,None,:,:]*dr_dx2[None,None,:,:,:]
+	    +dk2_drdr[None,None,None,:,:]*dr_dx[None,:,None,:,:]*dr2_dlengthscaledx2[:,None,:,:,:])
+	    g[:,:,:,(invd == 0.)] = (-2.0*I[:,:,None,:,:]*I[:,None,:,:,:]*K[None,None,None,:,:]/(self.lengthscale[:,None,None,None,None]**3))[:,:,:,(invd == 0.)]
+	return g
+     
+    def dK3_dXdXdX2(self, X, X2):
+	if X2 is None:
+	    X2 = X
+	r = self._scaled_dist(X, X2)
+	dr_dx = self.dr_dX(X, X2)
+	dr2_dxdx2 = self.dr2_dXdX2(X,X2)
+	dr3_dxdxdx2 = self.dr3_dXdXdX2(X, X2)
+	dk_dr = self.dK_dr(r)
+	dk2_drdr = self.dK2_drdr(r)
+	dk3_drdrdr = self.dK3_drdrdr(r)
+	return -1.0*dk3_drdrdr[None,None,None,:,:]*dr_dx[:,None,None,:,:]*dr_dx[None,:,None,:,:]*dr_dx[None,None,:,:,:] + dk2_drdr[None,None,None,:,:]*dr2_dxdx2[:,:,None,:,:]*dr_dx[None,None,:,:,:] + dk2_drdr[None,None,None,:,:]*dr2_dxdx2[:,None,:,:,:]*dr_dx[None,:,None,:,:] + dk2_drdr[None,None,None,:,:]*dr2_dxdx2[None,:,:,:,:]*dr_dx[:,None,None,:,:] + dk_dr[None,None,None,:,:]*dr3_dxdxdx2
+      
+    def dK3_dXdX2dXdX2(self, X, X2):
+	if X2 is None:
+	    X2 = X
+	r = self._scaled_dist(X, X2)
+	dr_dx = self.dr_dX(X, X2)
+	dr2_dxdx2 = self.dr2_dXdX2(X,X2)
+	dr3_dxdxdx2 = self.dr3_dXdX2dX(X, X2)
+	dr4_dxdx2dxdx2 = self.dr4_dXdX2dXdX2(X,X2)
+	dk_dr = self.dK_dr(r)
+	dk2_drdr = self.d2K_drdr(r)
+	dk3_drdrdr = self.d3K_drdrdr(r)
+	dk4_drdrdrdr = self.d4K_drdrdrdr(r)
+	# tmp variables used for easier readability
+	tmp1 = dk4_drdrdr[None,None,None,None,:,:]*dr_dx[:,None,None,None,:,:]*dr_dx[None,:,None,None,:,:]*dr_dx[None,None,:,None,:,:]*dr_dx[None,None,None,:,:,:]
+	tmp2 = -1.0*dk3_drdrdr[None,None,None,None,:,:]*(dr2_dxdx2[:,:,None,None,:,:]*dr_dx[None,None,:,None,:,:]*dr_dx[None,None,None,:,:,:]
+							+dr2_dxdx2[:,None,:,None,:,:]*dr_dx[None,:,None,None,:,:]*dr_dx[None,None,None,:,:,:]
+							+dr2_dxdx2[:,None,None,:,:,:]*dr_dx[None,:,None,None,:,:]*dr_dx[None,None,:,None,:,:]
+							+dr_dx[:,None,None,None,:,:]*dr2_dxdx2[None,:,None,:,:,:]*dr_dx[None,None,:,None,:,:]
+							+dr_dx[:,None,None,None,:,:]*dr2_dxdx2[None,:,:,None,:,:]*dr_dx[None,None,None,:,:,:]
+							+dr_dx[:,None,None,None,:,:]*dr_dx[None,:,None,None,:,:]*dr2_dxdx2[None,None,:,:,:,:])
+	tmp3 = dk2_drdr[None,None,None,None,:,:]*(dr2_dxdx2[:,:,None,None,:,:]*dr2_dxdx2[None,None,:,:,:,:]
+						 +dr2_dxdx2[:,None,:,None,:,:]*dr2_dxdx2[None,:,None,:,:,:]
+						 +dr2_dxdx2[:,None,None,:,:,:]*dr2_dxdx2[None,:,:,None,:,:])
+	tmp4 = dk2_drdr[None,None,None,None,:,:]*(dr3_dxdx2dx[:,:,:,None,:,:]*dr_dx[None,None,None,:,:,:]
+						 +dr3_dxdx2dx[:,:,None,:,:,:]*dr_dx[None,None,:,None,:,:]
+						 +dr3_dxdx2dx[:,None,:,:,:,:]*dr_dx[None,:,None,None,:,:]
+						 +dr3_dxdx2dx[None,:,:,:,:,:]*dr_dx[:,None,None,None,:,:])
+	tmp5 = dk_dr[None,None,None,None,:,:]*dr4_dxdx2dxdx2
+	tmp = tmp1+tmp2+tmp3+tmp4+tmp5
+	#Fix diagonal
+	I = (np.ones((X.shape[0], X.shape[0], X.shape[1], X.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	lengthscale4inv = np.ones((X.shape[1]), dtype=np.float64)/(self.lengthscale**4)
+	tmp[:,:,:,:, (r==.0)] = (3.0*I[:,:,None,None,:,:]*I[:,None,:,None,:,:]*I[:,None,None,:,:,:]*self.K_of_r(r)*lengthscale4inv[:,None,None,None,None,None])[:,:,:,:, (r==.0)]
+	return tmp
 
     def _unscaled_dist(self, X, X2=None):
         """
@@ -160,7 +435,7 @@ class Stationary(Kern):
         ret[:] = self.variance
         return ret
 
-    def update_gradients_diag(self, dL_dKdiag, X):
+    def update_gradients_diag2(self, dL_dKdiag, X):
         """
         Given the derivative of the objective with respect to the diagonal of
         the covariance matrix, compute the derivative wrt the parameters of
@@ -171,28 +446,14 @@ class Stationary(Kern):
         self.variance.gradient = np.sum(dL_dKdiag)
         self.lengthscale.gradient = 0.
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
+    def update_gradients_full2(self, dL_dK, X, X2=None):
         """
         Given the derivative of the objective wrt the covariance matrix
         (dL_dK), compute the gradient wrt the parameters of this kernel,
         and store in the parameters object as e.g. self.variance.gradient
         """
-        self.variance.gradient = np.sum(self.K(X, X2)* dL_dK)/self.variance
-
-        #now the lengthscale gradient(s)
-        dL_dr = self.dK_dr_via_X(X, X2) * dL_dK
-        if self.ARD:
-
-            tmp = dL_dr*self._inv_dist(X, X2)
-            if X2 is None: X2 = X
-            if config.getboolean('cython', 'working'):
-                self.lengthscale.gradient = self._lengthscale_grads_cython(tmp, X, X2)
-            else:
-                self.lengthscale.gradient = self._lengthscale_grads_pure(tmp, X, X2)
-        else:
-            r = self._scaled_dist(X, X2)
-            self.lengthscale.gradient = -np.sum(dL_dr*r)/self.lengthscale
-
+        self.lengthscale.gradient = self.dK_dlengthscale_v2(dL_dK, X, X2)
+        self.variance.gradient = np.sum(dL_dK*self.dK_dvariance(self._scaled_dist(X, X2)))
 
     def _inv_dist(self, X, X2=None):
         """
@@ -222,6 +483,30 @@ class Stationary(Kern):
             return self._gradients_X_cython(dL_dK, X, X2)
         else:
             return self._gradients_X_pure(dL_dK, X, X2)
+	 
+    def gradients_X_Kd(self, dL_dK, X, Xd=None, Xdi=None, X2=None, X2d=None, X2di=None):
+	if X2 is None:
+	    X2 = X
+        if (Xd is not None) and (Xdi is None):
+            Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+        if (X2d is not None) and (X2di is None):
+            X2di = np.ones((X2d.shape[0], X2d.shape[1]), dtype=bool)
+        #Transform the boolean matrices to index vectors:
+        if Xdi is not None:
+	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+	if X2di is not None:
+	    x2di = np.nonzero(X2di.T.reshape(-1))[0]
+        dk_dx = self.dK_dX(X, X2)
+        K = dL_dK[:,:X.shape[0],:X2.shape[0]]*self.dK_dX(X, X2)
+        if X2d is not None:
+	    K = np.concatenate((K, dL_dK[:,:X.shape[0],X2.shape[0]:]*(-1.0*self.dK2_dXdX2(X, X2d).swapaxes(1,2).reshape((X.shape[1], X.shape[0], -1)))[:,:,x2di]), axis=2)
+        if Xd is not None:
+	    K2 = dL_dK[:,X.shape[0]:,:X2.shape[0]]*(self.dK2_dXdX2(Xd, X2).reshape((X.shape[1],-1,X2.shape[0])))[:,xdi,:]
+	    if X2d is not None:
+		K2 = np.concatenate((K2, dL_dK[:,X.shape[0]:,:X2.shape[0]:]*(self.dK3_dXdXdX2(Xd, X2d).swapaxes(2,3).reshape((X.shape[1], Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[:,xdi,:][:,:,x2di]), axis=2)
+	    K = np.concatenate((K, K2), axis=1)
+        return K
+	
 
     def gradients_XX(self, dL_dK, X, X2=None):
         """
@@ -261,7 +546,30 @@ class Stationary(Kern):
         grad = (((dL_dK*(tmp1*invdist2 - tmp2))[:,:,None,None] * dist)/l2[None,None,:,None]
                 - (dL_dK*tmp1)[:,:,None,None] * I)/l2[None,None,None,:]
         return grad
-
+    
+    def gradients_X_Kd(self, dL_dK, X, Xd=None, Xdi=None, X2=None, X2d=None, X2di=None):
+	if X2 is None:
+	    X2 = X
+        if (Xd is not None) and (Xdi is None):
+            Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+        if (X2d is not None) and (X2di is None):
+            X2di = np.ones((X2d.shape[0], X2d.shape[1]), dtype=bool)
+        #Transform the boolean matrices to index vectors:
+        if Xdi is not None:
+	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+	if X2di is not None:
+	    x2di = np.nonzero(X2di.T.reshape(-1))[0]
+        dk_dx = self.dK_dX(X, X2)
+        K = self.dK_dX(X, X2)
+        if X2d is not None:
+	    K = np.concatenate((K, (-1.0*self.dK2_dXdX2(X, X2d).swapaxes(1,2).reshape((X.shape[1], X.shape[0], -1)))[:,:,x2di]), axis=2)
+        if Xd is not None:
+	    K2 = (self.dK2_dXdX2(Xd, X2).reshape((X.shape[1],-1,X2.shape[0])))[:,xdi,:]
+	    if X2d is not None:
+		K2 = np.concatenate((K2, (self.dK3_dXdXdX2(Xd, X2d).swapaxes(2,3).reshape((X.shape[1], Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[:,xdi,:][:,:,x2di]), axis=2)
+	    K = np.concatenate((K, K2), axis=1)
+        return K
+      
     def gradients_XX_diag(self, dL_dK_diag, X):
         """
         Given the derivative of the objective dL_dK, compute the second derivative of K wrt X:
@@ -315,9 +623,72 @@ class Stationary(Kern):
     def input_sensitivity(self, summarize=True):
         return self.variance*np.ones(self.input_dim)/self.lengthscale**2
 
-
-
-
+    def update_gradients_full(self, dL_dK, X, X2=None, Xd=None, Xdi=None, X2d=None, X2di=None):
+      	if X2 is None:
+	    X2 = X
+        if (Xd is not None) and (Xdi is None):
+            Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+        if (X2d is not None) and (X2di is None):
+            X2di = np.ones((X2d.shape[0], X2d.shape[1]), dtype=bool)
+        #Transform the boolean matrices to index vectors:
+        if Xdi is not None:
+	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+	if X2di is not None:
+	    x2di = np.nonzero(X2di.T.reshape(-1))[0]
+        
+        #Update variance gradient
+        self.variance.gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dvariance(self._scaled_dist(X, X2)))
+        if X2d is not None:
+	    self.variance.gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dvariancedX2(X,X2d)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
+        if Xd is not None:
+	    self.variance.gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dvariancedX(Xd,X2)).reshape((-1,X2.shape[0])))[xdi,:])
+	    if X2d is not None:
+		self.variance.gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dvariancedXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
+        
+        #Update lengthscale gradient
+        if not self.ARD:
+	    self.lengthscale_gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dlengthscale(X, X2))
+	    if X2d is not None:
+		self.lengthscale_gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dlengthscaledX2(X,X2)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
+	    if Xd is not None:
+		self.lengthscale_gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dlengthscaledX(X,X2)).reshape((-1,X2.shape[0])))[xdi,:])
+		if X2d is not None:
+		    self.lengthscale_gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dlengthscaledXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
+	else:
+	    self.lengthscale_gradient = np.array([np.sum(dL_dK[None,:X.shape[0],:X2.shape[0]]*self.dK_dlengthscale(X, X2)[q,:,:]) for q in xrange(0, X.shape[1])])
+	    if X2d is not None:
+		self.lengthscale_gradient += np.array([np.sum(dL_dK[None,None,:X.shape[0],X2.shape[0]:]*((self.dK2_dlengthscaledX2(X,X2d)[q,:,:,:]).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]) for q in xrange(0, X.shape[1])])
+	    if Xd is not None:
+		self.lengthscale_gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dlengthscaledX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in xrange(0, X.shape[1])])
+		if X2d is not None:
+		    self.lengthscale_gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dlengthscaledXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in xrange(0, X.shape[1])])
+        return
+    
+    def update_gradients_diag(self, dL_dKdiag, X, Xd=None, Xdi=None):
+        if (Xd is not None) and (Xdi is None):
+            Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+	if Xdi is not None:
+	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+        
+        ind = np.arange(X.shape[0])
+        indxd = np.arange(Xd.shape[0])
+        indd = np.arange(X.shape[1])
+        #Update variance gradient
+        self.variance.gradient = np.sum(dL_dKdiag*(self.dK_dvariance(self._scaled_dist(X, X2))[ind,ind]))
+        if Xd is not None:
+	    self.variance.gradient += np.sum(((dL_dKdiag[None,None,:]*(self.dK3_dvariancedXdX2(X, X2)[indd,indd,indxd,indxd])).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1])))[xdi])
+        
+        #Update lengthscale gradient
+        if not self.ARD:
+	    self.lengthscale_gradient = np.sum(dL_dKdiag*(self.dK_dlengthscale(X, X2)[ind,ind]))
+	    if Xd is not None:
+		self.lengthscale_gradient += np.sum(((dL_dKdiag[None,None,:]*(self.dK3_dlengthscaledXdX2(X, X2)[indd,indd,indxd,indxd])).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1])))[xdi])
+	else:
+	    self.lengthscale_gradient = np.array([np.sum(dL_dKdiag*self.dK_dlengthscale(X, X2)[q,ind,ind]) for q in xrange(0, X.shape[1])])
+	    if Xd is not None:
+		self.lengthscale_gradient += np.array([np.sum(((dL_dKdiag[None,None,:]*self.dK3_dlengthscaledXdX2(Xd, X2d)[q,indd,indd,indxd,indxd]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1])))[xdi]) for q in xrange(0, X.shape[1])])
+        return
+      
 class Exponential(Stationary):
     def __init__(self, input_dim, variance=1., lengthscale=None, ARD=False, active_dims=None, name='Exponential'):
         super(Exponential, self).__init__(input_dim, variance, lengthscale, ARD, active_dims, name)

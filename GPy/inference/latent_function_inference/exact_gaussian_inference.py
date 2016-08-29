@@ -5,6 +5,7 @@ from .posterior import PosteriorExact as Posterior
 from ...util.linalg import pdinv, dpotrs, tdot
 from ...util import diag
 import numpy as np
+import inspect
 from . import LatentFunctionInference
 log_2_pi = np.log(2*np.pi)
 
@@ -21,11 +22,10 @@ class ExactGaussianInference(LatentFunctionInference):
     def __init__(self):
         pass#self._YYTfactor_cache = caching.cache()
 
-    def inference(self, kern, X, likelihood, Y, mean_function=None, Y_metadata=None, K=None, precision=None, Z_tilde=None):
+    def inference(self, kern, X, likelihood, Y, mean_function=None, Y_metadata=None, K=None, precision=None, Z_tilde=None, Xd=None, Yd=None, di=None):
         """
         Returns a Posterior class containing essential quantities of the posterior
         """
-
         if mean_function is None:
             m = 0
         else:
@@ -33,19 +33,22 @@ class ExactGaussianInference(LatentFunctionInference):
 
         if precision is None:
             precision = likelihood.gaussian_variance(Y_metadata)
-
         YYT_factor = Y-m
 
-        if K is None:
-            K = kern.K(X)
-
+        if (K is None):
+	    if Xd is None:
+		K = kern.K(X)
+	    else:
+		K = kern.Kd(X, Xd=Xd, Xdi=di, X2=X, X2d=Xd, X2di=di)
+		if (Yd is None) or not (Xd.shape == Yd.shape) or not (Xd.shape == di.shape):
+		    raise AttributeError("Values and indices for derivative observations not given or they are of wrong size")
+		YYT_factor = np.array(np.bmat([[YYT_factor], [np.array([(Yd.reshape(-1))[np.nonzero(di.T.reshape(-1))]]).T]]))
         Ky = K.copy()
         diag.add(Ky, precision+1e-8)
 
         Wi, LW, LWi, W_logdet = pdinv(Ky)
 
         alpha, _ = dpotrs(LW, YYT_factor, lower=1)
-
         log_marginal =  0.5*(-Y.size * log_2_pi - Y.shape[1] * W_logdet - np.sum(alpha * YYT_factor))
 
         if Z_tilde is not None:

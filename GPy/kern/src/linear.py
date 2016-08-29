@@ -62,6 +62,63 @@ class Linear(Kern):
         else:
             return self._dot_product(X, X2) * self.variances
 
+    def dK_dX(self, X, X2=None):
+	tmp = 1.0
+	if X2 is None:
+	    X2 = X
+	    tmp = 2.0
+	v = self.variances*np.ones((X.shape[1])) 
+	return tmp*v[:,None,None]*(X2.swapaxes(0,1))[:,None,:]*np.ones((X.shape[1], X.shape[0], X2.shape[0])) 
+	
+    def dK_dX2(self, X, X2=None):
+	tmp = 1.0
+	if X2 is None:
+	    X2 = X
+	    tmp = 2.0
+	v = self.variances*np.ones((X.shape[1])) 
+	return tmp*v[:,None,None]*(X.swapaxes(0,1))[:,:,None]*np.ones((X.shape[1], X.shape[0], X2.shape[0])) 
+    
+    def dK2_dXdX2(self, X, X2=None):
+	tmp = 1.0
+	if X2 is None: # Assumed that X2=X
+	    tmp = 2.0
+	v = self.variances*np.ones((X.shape[1]))
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return tmp*I*v[:,None,None,None] 
+	
+    def dK_dvariances(self, X, X2=None):
+	return (X.swapaxes(0,1)[:,:,None])*(X2.swapaxes(0,1)[:,None,:]) if self.ARD else self._dot_product(X, X2)
+
+    def dK2_dvariancesdX(self, X, X2=None):
+	tmp = 1.0
+	if X2 is None:
+	    tmp = 2.0
+	    X2 = X
+	if self.ARD:
+	    I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	    return tmp*I*(X2.swapaxes(0,1))[None,:,None,:]
+	else:
+	    return tmp*(X2.swapaxes(0,1))[:,None,:]
+	
+    def dK2_dvariancesdX2(self, X, X2=None):
+	tmp = 1.0
+	if X2 is None:
+	    tmp = 2.0
+	    X2 = X
+	if self.ARD:
+	    I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	    return tmp*I*(X.swapaxes(0,1))[None,:,:,None]
+	else:
+	    return tmp*(X.swapaxes(0,1))[:,:,None]
+	
+    def dK3_dvariancesdXdX2(self, X, X2=None):
+	tmp = 1.0
+	if X2 is None:
+	    tmp = 2.0
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return tmp*I[:,None,:,:,:]*I[None,:,:,:,:] if self.ARD else tmp*I
+	    
+
     @Cache_this(limit=3, ignore_args=(0,))
     def _dot_product(self, X, X2=None):
         if X2 is None:
@@ -72,7 +129,43 @@ class Linear(Kern):
     def Kdiag(self, X):
         return np.sum(self.variances * np.square(X), -1)
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
+    def update_gradients_full(self, dL_dK, X, X2=None, Xd=None, Xdi=None, X2d=None, X2di=None):
+      	if X2 is None:
+	    X2 = X
+        if (Xd is not None) and (Xdi is None):
+            Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+        if (X2d is not None) and (X2di is None):
+            X2di = np.ones((X2d.shape[0], X2d.shape[1]), dtype=bool)
+        #Transform the boolean matrices to index vectors:
+        if Xdi is not None:
+	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+	if X2di is not None:
+	    x2di = np.nonzero(X2di.T.reshape(-1))[0]
+        
+        #Update variance gradient
+        if not self.ARD:
+	    self.variances.gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dvariances(X, X2))
+	    if X2d is not None:
+		self.variances.gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dvariancesdX2(X,X2)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
+	    if Xd is not None:
+		self.variances.gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dvariancesdX(X,X2)).reshape((-1,X2.shape[0])))[xdi,:])
+		if X2d is not None:
+		    self.variances.gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dvariancesdXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
+	else:
+	    self.variances.gradient = np.array([np.sum(dL_dK[None,:X.shape[0],:X2.shape[0]]*self.dK_dvariances(X, X2)[q,:,:]) for q in xrange(0, X.shape[1])])
+	    if X2d is not None:
+		self.variances.gradient += np.array([np.sum(dL_dK[None,None,:X.shape[0],X2.shape[0]:]*((self.dK2_dvariancesdX2(X,X2d)[q,:,:,:]).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]) for q in xrange(0, X.shape[1])])
+	    if Xd is not None:
+		self.variances.gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dvariancesdX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in xrange(0, X.shape[1])])
+		if X2d is not None:
+		    self.variances.gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dvariancesdXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in xrange(0, X.shape[1])])
+        return
+	
+    def update_gradients_diag2(self, dL_dKdiag, X, Xd=None, Xdi=None):
+	#TODO
+	return
+
+    def update_gradients_full2(self, dL_dK, X, X2=None):
         if X2 is None: dL_dK = (dL_dK+dL_dK.T)/2
         if self.ARD:
             if X2 is None:
@@ -85,13 +178,12 @@ class Linear(Kern):
         else:
             self.variances.gradient = np.sum(self._dot_product(X, X2) * dL_dK)
 
-    def update_gradients_diag(self, dL_dKdiag, X):
+    def update_gradients_diag2(self, dL_dKdiag, X):
         tmp = dL_dKdiag[:, None] * X ** 2
         if self.ARD:
             self.variances.gradient = tmp.sum(0)
         else:
             self.variances.gradient = np.atleast_1d(tmp.sum())
-
 
     def gradients_X(self, dL_dK, X, X2=None):
         if X2 is None: dL_dK = (dL_dK+dL_dK.T)/2
@@ -167,6 +259,8 @@ class Linear(Kern):
 
     def gradients_qX_expectations(self, dL_dpsi0, dL_dpsi1, dL_dpsi2, Z, variational_posterior):
         return self.psicomp.psiDerivativecomputations(self, dL_dpsi0, dL_dpsi1, dL_dpsi2, Z, variational_posterior)[2:]
+
+
 
 class LinearFull(Kern):
     def __init__(self, input_dim, rank, W=None, kappa=None, active_dims=None, name='linear_full'):

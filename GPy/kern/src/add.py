@@ -59,6 +59,15 @@ class Add(CombinationKernel):
             # if only one part is given
             which_parts = [which_parts]
         return reduce(np.add, (p.Kdiag(X) for p in which_parts))
+    
+    def dK_dX(self, X, X2=None):
+        return reduce(np.add, (p.dK_dX(X, X2) for p in self.parts))
+   
+    def dK_dX2(self, X, X2=None):
+        return reduce(np.add, (p.dK_dX2(X, X2) for p in self.parts))
+    
+    def dK2_dXdX2(self, X, X2=None):
+        return reduce(np.add, (p.dK2_dXdX2(X, X2) for p in self.parts))
 
     def update_gradients_full(self, dL_dK, X, X2=None):
         [p.update_gradients_full(dL_dK, X, X2) for p in self.parts if not p.is_fixed]

@@ -9,6 +9,8 @@ from .mapping import Mapping
 from .. import likelihoods
 from ..inference.latent_function_inference import exact_gaussian_inference, expectation_propagation
 from GPy.core.parameterization.variational import VariationalPosterior
+import re
+import inspect
 
 import logging
 import warnings
@@ -35,7 +37,7 @@ class GP(Model):
 
 
     """
-    def __init__(self, X, Y, kernel, likelihood, mean_function=None, inference_method=None, name='gp', Y_metadata=None, normalizer=False):
+    def __init__(self, X, Y, kernel, likelihood, mean_function=None, inference_method=None, name='gp', Y_metadata=None, normalizer=False, Xd=None, Yd=None, di=None):
         super(GP, self).__init__(name)
 
         assert X.ndim == 2
@@ -81,7 +83,16 @@ class GP(Model):
 
         assert isinstance(likelihood, likelihoods.Likelihood)
         self.likelihood = likelihood
-
+	
+	if (Xd is not None):
+	    assert (Yd is not None)
+	    if (di is None):
+		di = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+	    assert ( (Xd.shape == di.shape) and (Xd.shape == Yd.shape))
+	self.Xd = Xd
+	self.Yd = Yd
+	self.di = di
+	
         if self.kern._effective_input_dim != self.X.shape[1]:
             warnings.warn("Your kernel has a different input dimension {} then the given X dimension {}. Be very sure this is what you want and you have not forgotten to set the right input dimenion in your kernel".format(self.kern._effective_input_dim, self.X.shape[1]))
 
@@ -189,9 +200,9 @@ class GP(Model):
             This method is not designed to be called manually, the framework is set up to automatically call this method upon changes to parameters, if you call
             this method yourself, there may be unexpected consequences.
         """
-        self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.likelihood, self.Y_normalized, self.mean_function, self.Y_metadata)
+        self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.likelihood, self.Y_normalized, self.mean_function, self.Y_metadata, Xd=self.Xd, Yd=self.Yd, di=self.di)
         self.likelihood.update_gradients(self.grad_dict['dL_dthetaL'])
-        self.kern.update_gradients_full(self.grad_dict['dL_dK'], self.X)
+        self.kern.update_gradients_full(self.grad_dict['dL_dK'], self.X, X2=self.X, Xd=self.Xd, Xdi=self.di, X2d=self.Xd,X2di=self.di)
         if self.mean_function is not None:
             self.mean_function.update_gradients(self.grad_dict['dL_dm'], self.X)
 
@@ -214,7 +225,7 @@ class GP(Model):
                         = N(f*| K_{x*x}(K_{xx} + \Sigma)^{-1}Y, K_{x*x*} - K_{xx*}(K_{xx} + \Sigma)^{-1}K_{xx*}
             \Sigma := \texttt{Likelihood.variance / Approximate likelihood covariance}
         """
-        mu, var = self.posterior._raw_predict(kern=self.kern if kern is None else kern, Xnew=Xnew, pred_var=self._predictive_variable, full_cov=full_cov)
+        mu, var = self.posterior._raw_predict(kern=self.kern if kern is None else kern, Xnew=Xnew, pred_var=self._predictive_variable, full_cov=full_cov, Xd=self.Xd, di=self.di)
         if self.mean_function is not None:
             mu += self.mean_function.f(Xnew)
         return mu, var

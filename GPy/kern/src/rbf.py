@@ -35,9 +35,24 @@ class RBF(Stationary):
 
     def dK_dr(self, r):
         return -r*self.K_of_r(r)
+    
+    def dK_dvariance(self, r):
+	return np.exp(-0.5 * r**2)
 
     def dK2_drdr(self, r):
         return (r**2-1)*self.K_of_r(r)
+
+    def dK3_drdrdr(self, r):
+        return (3.0-r**2)*r*self.K_of_r(r)
+      
+    def dk4_drdrdrdr(self, r):
+	return (3.0 -6.0*r**2 +r**4)*self.K_of_r(r)
+
+    def dK2_dvariancedr(self, r):
+        return -r * np.exp(-0.5 * r**2)
+
+    def dK3_dvariancedrdr(self,r):
+        return (r**2-1) * np.exp(-0.5 * r**2)
 
     def dK2_drdr_diag(self):
         return -self.variance # as the diagonal of r is always filled with zeros
@@ -89,10 +104,10 @@ class RBF(Stationary):
     def gradients_qX_expectations(self, dL_dpsi0, dL_dpsi1, dL_dpsi2, Z, variational_posterior):
         return self.psicomp.psiDerivativecomputations(self, dL_dpsi0, dL_dpsi1, dL_dpsi2, Z, variational_posterior)[3:]
 
-    def update_gradients_diag(self, dL_dKdiag, X):
-        super(RBF,self).update_gradients_diag(dL_dKdiag, X)
+    def update_gradients_diag(self, dL_dKdiag, X, Xd=None, Xdi=None):
+        super(RBF,self).update_gradients_diag(dL_dKdiag, X, Xd=Xd, Xdi=Xdi)
         if self.use_invLengthscale: self.inv_l.gradient =self.lengthscale.gradient*(self.lengthscale**3/-2.)
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
-        super(RBF,self).update_gradients_full(dL_dK, X, X2)
+    def update_gradients_full(self, dL_dK, X, X2=None, Xd=None, Xdi=None, X2d=None, X2di=None):
+        super(RBF,self).update_gradients_full(dL_dK, X, X2 = X2, Xd=Xd, Xdi=Xdi, X2d=X2d, X2di=X2di)
         if self.use_invLengthscale: self.inv_l.gradient =self.lengthscale.gradient*(self.lengthscale**3/-2.)
