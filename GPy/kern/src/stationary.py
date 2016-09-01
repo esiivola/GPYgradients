@@ -703,6 +703,21 @@ class Exponential(Stationary):
     def dK_dr(self, r):
         return -self.K_of_r(r)
 
+    def dK_dvariance(self, r):
+	return np.exp(-r)
+    
+    def dK2_drdr(self, r):
+        return self.K_of_r(r)
+
+    def dK3_drdrdr(self, r):
+        return -self.K_of_r(r)
+
+    def dK2_dvariancedr(self, r):
+        return -np.exp(-r)
+
+    def dK3_dvariancedrdr(self, r):
+        raise np.exp(-r)
+
 #    def sde(self):
 #        """
 #        Return the state space representation of the covariance.
@@ -737,6 +752,20 @@ class OU(Stationary):
     def dK_dr(self,r):
         return -1.*self.variance*np.exp(-r)
 
+    def dK_dvariance(self, r):
+	return np.exp(-r)
+      
+    def dK2_drdr(self, r):
+        return self.K_of_r(r)
+
+    def dK3_drdrdr(self, r):
+        return -self.K_of_r(r)
+
+    def dK2_dvariancedr(self, r):
+        return -np.exp(-r)
+
+    def dK3_dvariancedrdr(self, r):
+        raise np.exp(-r)
 
 class Matern32(Stationary):
     """
@@ -756,6 +785,21 @@ class Matern32(Stationary):
 
     def dK_dr(self,r):
         return -3.*self.variance*r*np.exp(-np.sqrt(3.)*r)
+      
+    def dK_dvariance(self, r):
+	return (1. + np.sqrt(3.) * r) * np.exp(-np.sqrt(3.) * r)
+
+    def dK2_drdr(self, r):
+        return 3.*self.variance*np.exp(-np.sqrt(3.) * r)*(np.sqrt(3.)*r - 1.)
+
+    def dK3_drdrdr(self, r):
+        return 3.*self.variance*np.exp(-np.sqrt(3.)* r)*(3*r-2*np.sqrt(3.))
+
+    def dK2_dvariancedr(self, r):
+        return -3.*r*np.exp(-np.sqrt(3.)*r)
+
+    def dK3_dvariancedrdr(self, r):
+        return 3.*np.exp(-np.sqrt(3.) * r)*(np.sqrt(3.)*r - 1.)
 
     def Gram_matrix(self, F, F1, F2, lower, upper):
         """
@@ -835,6 +879,21 @@ class Matern52(Stationary):
 
     def dK_dr(self, r):
         return self.variance*(10./3*r -5.*r -5.*np.sqrt(5.)/3*r**2)*np.exp(-np.sqrt(5.)*r)
+    
+    def dK_dvariance(self, r):
+	return (1+np.sqrt(5.)*r+5./3*r**2)*np.exp(-np.sqrt(5.)*r)
+
+    def dK2_drdr(self, r):
+        return 5./3*self.variance*np.exp(-np.sqrt(5.)*r)*(-np.sqrt(5.)*r+5.*r**2-1)
+
+    def dK3_drdrdr(self, r):
+        return 25./3*self.variance*np.exp(-np.sqrt(5.)*r)*(3*r - np.sqrt(5)*r**2)
+
+    def dK2_dvariancedr(self, r):
+        return (-5./3*r -5.*np.sqrt(5.)/3*r**2)*np.exp(-np.sqrt(5.)*r)
+
+    def dK3_dvariancedrdr(self, r):
+        return 5./3*np.exp(-np.sqrt(5.)*r)*(-np.sqrt(5.)*r+5.*r**2-1)
 
     def Gram_matrix(self, F, F1, F2, F3, lower, upper):
         """
@@ -890,6 +949,24 @@ class ExpQuad(Stationary):
 
     def dK_dr(self, r):
         return -r*self.K_of_r(r)
+    
+    def dK_dvariance(self, r):
+	return np.exp(-0.5 * r**2)
+
+    def dK2_drdr(self, r):
+        return (r**2-1)*self.K_of_r(r)
+
+    def dK3_drdrdr(self, r):
+        return (3.0-r**2)*r*self.K_of_r(r)
+      
+    def dk4_drdrdrdr(self, r):
+	return (3.0 -6.0*r**2 +r**4)*self.K_of_r(r)
+
+    def dK2_dvariancedr(self, r):
+        return -r * np.exp(-0.5 * r**2)
+
+    def dK3_dvariancedrdr(self,r):
+        return (r**2-1) * np.exp(-0.5 * r**2)
 
 class Cosine(Stationary):
     def __init__(self, input_dim, variance=1., lengthscale=None, ARD=False, active_dims=None, name='Cosine'):
@@ -900,6 +977,21 @@ class Cosine(Stationary):
 
     def dK_dr(self, r):
         return -self.variance * np.sin(r)
+
+    def dK_dvariance(self, r):
+	return np.cos(r)
+
+    def dK2_drdr(self, r):
+        return -self.variance * np.cos(r)
+
+    def dK3_drdrdr(self, r):
+        return self.variance * np.sin(r)
+      
+    def dK2_dvariancedr(self, r):
+        return -np.sin(r)
+
+    def dK3_dvariancedrdr(self,r):
+        return -np.cos(r)
 
 
 class RatQuad(Stationary):
@@ -928,7 +1020,44 @@ class RatQuad(Stationary):
 #         return -self.variance*self.power*r*np.power(1. + r2/2., - self.power - 1.)
         return-self.variance*self.power*r*np.exp(-(self.power+1)*np.log1p(r2/2.))
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
+    def update_gradients_full(self, dL_dK, X, X2=None, Xd=None, Xdi=None, X2d=None, X2di=None):
+        super(RatQuad, self).update_gradients_full(dL_dK, X, X2, Xd, Xdi, X2d, X2di)
+      	if X2 is None:
+	    X2 = X
+        if (Xd is not None) and (Xdi is None):
+            Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+        if (X2d is not None) and (X2di is None):
+            X2di = np.ones((X2d.shape[0], X2d.shape[1]), dtype=bool)
+        #Transform the boolean matrices to index vectors:
+        if Xdi is not None:
+	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+	if X2di is not None:
+	    x2di = np.nonzero(X2di.T.reshape(-1))[0]
+	    
+        #Update power gradient
+        self.power.gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dpower(self._scaled_dist(X, X2)))
+        if X2d is not None:
+	    self.power.gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dpowerdX2(X,X2d)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
+        if Xd is not None:
+	    self.power.gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dpowerdX(Xd,X2)).reshape((-1,X2.shape[0])))[xdi,:])
+	    if X2d is not None:
+		self.power.gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dpowerdXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
+
+    def update_gradients_diag(self, dL_dKdiag, X, Xd=None, Xdi=None):
+        super(RatQuad, self).update_gradients_diag(dL_dKdiag, X, Xd, Xdi)
+        if (Xd is not None) and (Xdi is None):
+            Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+	if Xdi is not None:
+	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+        
+        ind = np.arange(X.shape[0])
+        indxd = np.arange(Xd.shape[0])
+        indd = np.arange(X.shape[1])
+        #Update power gradient
+        if Xd is not None:
+	    self.power.gradient = np.sum(((dL_dKdiag[None,None,:]*(self.dK3_dpowerXdX2(X, X2)[indd,indd,indxd,indxd])).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1])))[xdi])
+
+    def update_gradients_full2(self, dL_dK, X, X2=None):
         super(RatQuad, self).update_gradients_full(dL_dK, X, X2)
         r = self._scaled_dist(X, X2)
         r2 = np.square(r)
@@ -937,8 +1066,62 @@ class RatQuad(Stationary):
         grad = np.sum(dL_dK*dK_dpow)
         self.power.gradient = grad
 
-    def update_gradients_diag(self, dL_dKdiag, X):
+    def update_gradients_diag2(self, dL_dKdiag, X, X2=None):
         super(RatQuad, self).update_gradients_diag(dL_dKdiag, X)
-        self.power.gradient = 0.
+        #self.power.gradient = 0.
+        
+    def dK2_dpowerdX(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        dk2_dpowerdr = self.dK2_dpowerdr(r)
+        dr_dx = self.dr_dX(X, X2)
+        return dk2_dpowerdr*dr_dx
+    
+    def dK2_dpowerdX2(self, X, X2):
+	r = self._scaled_dist(X, X2)
+        dk2_dpowerdr = self.dK2_dpowerdr(r)
+        dr_dx2 = self.dr_dX2(X, X2)
+        return dk2_dpowerdr*dr_dx2
+    
+    def dK3_dpowerdXdX2(self, X, X2):
+	r = self._scaled_dist(X, X2)
+	dk2_dpowerdr = self.dK2_dpowerdr(r)
+	dr_dx = self.dr_dX(X, X2)
+	dr_dx2 = self.dr_dX2(X,X2)
+	dr2_dxdx2 = self.dr2_dXdX2(X, X2)
+	dk3_dpowerdrdr = self.dK3_dpowerdrdr(r)
+	dk2_dpowerdr = self.dK2_dpowerdr(r)
+	tmp = dk2_dpowerdr[None,None,:,:]*dr2_dxdx2[:,:,:,:]
+	tmp[:,:,(self._inv_dist(X, X2)) == 0.] += dr2_dxdx2[:,:,(self._inv_dist(X, X2)) == 0.]
+	return tmp + dk3_dpowerdrdr[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:]
+      
+    def dK_dvariance(self, r):
+	r2 = np.square(r)
+	return np.exp(-self.power*np.log1p(r2/2.))
 
+    def dK_dpower(self, r):
+	r2 = np.square(r)
+	return self.variance*np.exp(-self.power*np.log1p(r2/2.))*np.log1p(r2/2.)
+      
+    def dK2_drdr(self, r):
+        r2 = np.square(r)
+        return self.variance*self.power*((self.power+1)*r**2*np.exp(-(self.power+2)*np.log1p(r2/2.)) - np.exp(-(self.power+1)*np.log1p(r2/2.)))
 
+    def dK3_drdrdr(self, r):
+	r2 = np.square(r)
+        return self.variance*self.power*(self.power+1)*r*(3*np.exp(-(self.power+2)*np.log1p(r2/2.)) - (self.power+2)*np.exp(-(self.power+3)*np.log1p(r2/2.)))
+      
+    def dK2_dvariancedr(self, r):
+	r2 = np.square(r)
+        return -self.power*r*np.exp(-(self.power+1)*np.log1p(r2/2.))
+    
+    def dK2_dpowerdr(self, r):
+	r2 = np.square(r)
+	return self.variance*r*np.exp(-(self.power+1)*np.log1p(r2/2.))*(-self.power*np.log1p(r2/2.) - 1)
+
+    def dK3_dvariancedrdr(self,r):
+	r2 = np.square(r)
+        return self.power*((self.power+1)*r**2*np.exp(-(self.power+2)*np.log1p(r2/2.)) - np.exp(-(self.power+1)*np.log1p(r2/2.)))
+      
+    def dK3_dpowerdrdr(Self, r):
+	r2 = np.square(r)
+	return self.variance*( ((1+2*self.power) - (1+self.power)*self.power*np.log1p(r2/2.))*r**2*np.exp(-(self.power+2)*np.log1p(r2/2.)) + np.exp(-(self.power+1)*np.log1p(r2/2.))*(-1 +self.power*np.log1p(r2/2.)))

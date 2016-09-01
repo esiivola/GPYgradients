@@ -115,12 +115,121 @@ class StdPeriodic(Kern):
 
         return self.variance * exp_dist
 
-
     def Kdiag(self, X):
         """Compute the diagonal of the covariance matrix associated to X."""
         ret = np.empty(X.shape[0])
         ret[:] = self.variance
         return ret
+      
+    def dK_dX(self, X, X2=None):
+      	lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+	periodinv = np.ones(X.shape[1])/(self.period)
+	dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+	base = np.pi * dist * periodinv[:,None,None]
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	return -self.variance*np.pi/2.*np.sin(2.*base)*exp_dist[None,:,:]*lengthscale2inv[:,None,None]*periodinv[:,None,None]
+   
+    def dK_dX2(self, X, X2=None):
+	return -self.dK_dX(X, X2)
+    
+    def dK2_dXdX2(self, X, X2=None):
+	lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+	periodinv = lengthscale2inv = np.ones(X.shape[1])/(self.period)
+	dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+	base = np.pi * dist * periodinv[:,None,None]
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return - self.variance*((np.pi**2)/4*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*periodinv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*exp_dist[None,None,:,:]+I*np.cos(2.*base[:,None,:,:])*exp_dist)
+      
+    def dK_dvariance(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        base = np.pi * (X[:, None, :] - X2[None, :, :]) / self.period
+        return np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale ), axis = -1 ) )
+    
+    def dK_dlengthscale(self, X, X2=None):
+	if X2 is None:
+	    X2=X
+      	lengthscale3inv = np.ones(X.shape[1])/(self.lengthscale**3)
+	periodinv = np.ones(X.shape[1])/(self.period)
+	dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+	base = np.pi * dist *periodinv[:,None,None]
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	return self.variance*np.sum((np.sin(base))**2, axis=0)*exp_dist*lengthscale3inv[:,None] if not self.ARD2 else self.variance*(np.sin(base))**2*exp_dist[None,:,:]*lengthscale3inv[:,None,None]
+      
+    def dK_dperiod(self, X, X2=None):
+	if X2 is None:
+	    X2=X
+      	lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+	periodinv = np.ones(X.shape[1])/(self.period)
+	dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+	base = np.pi * dist *periodinv[:,None,None]
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	return self.variance*exp_dist*np.sum(np.pi/2.*dist*np.sin(2.*base), axis=0) if not self.ARD1 else self.variance*exp_dist[None,:,:]*np.pi/2.*dist*np.sin(2.*base)
+      
+    def dK2_dvariancedX(self, X, X2=None):
+      	if X2 is None:
+	    X2=X
+	base = np.rollaxis(np.pi * (X[:, None, :] - X2[None, :, :]) / self.period ,2,0)
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+	periodinv = lengthscale2inv = np.ones(X.shape[1])/(self.period)
+	return np.pi/2*np.sin(2.*base)*exp_dist[None,:,:]*lengthscale2inv[:,None,None]*periodinv[:,None,None]
+    
+    def dK2_dlengthscaledX(self, X, X2=None):
+	if X2 is None:
+	    X2=X
+      	lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+      	lengthscale3inv = np.ones(X.shape[1])/(self.lengthscale**3)
+	periodinv = np.ones(X.shape[1])/(self.period)
+	dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+	base = np.pi * dist *periodinv[:,None,None]
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return np.pi*self.variance*lengthscale3inv[:,None,None]*periodinv[:,None,None]*np.sin(2.*base)*exp_dist[None,:,:]*(1-0.5*self.lengthscale*np.sum(lengthscale3inv[:,None,None]*np.sin(base)**2,  axis=0)) if not self.ARD2 else np.pi*self.variance*lengthscale3inv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2.*base[None,:,:,:])*exp_dist[None,None,:,:](I-0.5*(np.sin(base[:,None,:,:])**2)*lengthscale2inv[None,:,None,None])
+      
+    def dK2_dperioddX(self, X, X2=None):
+	raise NotImplementedError
+      
+    def dK2_dvariancedX2(self, X, X2=None):
+	raise -dK2_dvariancedX(self, X, X2)
+    
+    def dK2_dlengthscaledX2(self, X, X2=None):
+	raise -dK2_dlengthscaledX(self, X, X2)
+      
+    def dK2_dperioddX2(self, X, X2=None):
+	raise -dK2_dperioddX(self, X, X2)
+
+    def dK3_dvariancedXdX2(self, X, X2=None):
+	lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+	periodinv = lengthscale2inv = np.ones(X.shape[1])/(self.period)
+	dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+	base = np.pi * dist * periodinv[:,None,None]
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	return - (np.pi**2)/4*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*periodinv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*exp_dist[None,None,:,:]+I*np.cos(2.*base[:,None,:,:])*exp_dist
+    
+    def dK3_dlengthscaledXdX2(self, X, X2=None):
+	lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+	lengthscale3inv = np.ones(X.shape[1])/(self.lengthscale**3)
+	periodinv = lengthscale2inv = np.ones(X.shape[1])/(self.period)
+	dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+	base = np.pi * dist * periodinv[:,None,None]
+	exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+	I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+	tmp1 = -0.25*self.variance*np.pi**2*lengthscale3inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*(np.sin(base[:,None,None,:,:])**2)*np.sin(2.*base[None,:,None,:,:])*np.sin(2.*base[None,None,:,:,:])*exp_dist[None,None,None,:,:]
+	# i = j
+	tmp2 = 0.5*self.variance*lengthscale3inv[:,None,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[:,None,None,None,None]*periodinv[None,None,:,None,None]*I[:,:,None,:,:]*np.pi**2*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:])*exp_dist[None,None,None,:,:]
+	# i = k
+	tmp3 = 0.5*self.variance*lengthscale3inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*periodinv[:,None,None,None,None]*periodinv[None,:,None,None,None]*I[:,None,:,:,:]*np.pi**2*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:])*exp_dist[None,None,None,:,:]
+	# j = k
+	tmp4 = I[None,:,:,:,:]
+	# i=j=k
+	tmp5 = I[None,:,:,:,:]*I[:,None,:,:,:]
+	return tmp1+tmp2+tmp3+tmp4+tmp5
+      
+    def dK3_dperioddXdX2(self, X, X2=None):
+	raise NotImplementedError
 
     def update_gradients_full(self, dL_dK, X, X2=None):
         """derivative of the covariance matrix with respect to the parameters."""
