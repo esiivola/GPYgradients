@@ -22,7 +22,7 @@ class ExactGaussianInference(LatentFunctionInference):
     def __init__(self):
         pass#self._YYTfactor_cache = caching.cache()
 
-    def inference(self, kern, X, likelihood, Y, mean_function=None, Y_metadata=None, K=None, precision=None, Z_tilde=None, Xd=None, Yd=None, di=None):
+    def inference(self, kern, X, likelihood, Y, mean_function=None, Y_metadata=None, K=None, variance=None, Z_tilde=None, Xd=None, Yd=None, di=None):
         """
         Returns a Posterior class containing essential quantities of the posterior
         """
@@ -31,8 +31,9 @@ class ExactGaussianInference(LatentFunctionInference):
         else:
             m = mean_function.f(X)
 
-        if precision is None:
-            precision = likelihood.gaussian_variance(Y_metadata)
+        if variance is None:
+            variance = likelihood.gaussian_variance(Y_metadata)
+
         YYT_factor = Y-m
 
         if (K is None):
@@ -44,7 +45,7 @@ class ExactGaussianInference(LatentFunctionInference):
 		    raise AttributeError("Values and indices for derivative observations not given or they are of wrong size")
 		YYT_factor = np.array(np.bmat([[YYT_factor], [np.array([(Yd.reshape(-1))[np.nonzero(di.T.reshape(-1))]]).T]]))
         Ky = K.copy()
-        diag.add(Ky, precision+1e-8)
+        diag.add(Ky, variance+1e-8)
 
         Wi, LW, LWi, W_logdet = pdinv(Ky)
 

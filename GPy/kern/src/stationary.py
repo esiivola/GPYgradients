@@ -53,8 +53,8 @@ class Stationary(Kern):
     The lengthscale(s) and variance parameters are added to the structure automatically.
 
     Thanks to @strongh:
-    In Stationary, a covariance function is defined in GPy as stationary when it depends only on the l2-norm |x_1 - x_2 |. 
-    However this is the typical definition of isotropy, while stationarity is usually a bit more relaxed. 
+    In Stationary, a covariance function is defined in GPy as stationary when it depends only on the l2-norm |x_1 - x_2 |.
+    However this is the typical definition of isotropy, while stationarity is usually a bit more relaxed.
     The more common version of stationarity is that the covariance is a function of x_1 - x_2 (See e.g. R&W first paragraph of section 4.1).
     """
 
@@ -459,6 +459,16 @@ class Stationary(Kern):
         self.lengthscale.gradient = self.dK_dlengthscale_v2(dL_dK, X, X2)
         self.variance.gradient = np.sum(dL_dK*self.dK_dvariance(self._scaled_dist(X, X2)))
 
+    def update_gradients_direct(self, dL_dVar, dL_dLen):
+        """
+        Specially intended for the Grid regression case.
+        Given the computed log likelihood derivates, update the corresponding
+        kernel and likelihood gradients.
+        Useful for when gradients have been computed a priori.
+        """
+        self.variance.gradient = dL_dVar
+        self.lengthscale.gradient = dL_dLen
+
     def _inv_dist(self, X, X2=None):
         """
         Compute the elementwise inverse of the distance matrix, expecpt on the
@@ -693,6 +703,16 @@ class Stationary(Kern):
 		self.lengthscale_gradient += np.array([np.sum(((dL_dKdiag[None,None,:]*self.dK3_dlengthscaledXdX2(Xd, X2d)[q,indd,indd,indxd,indxd]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1])))[xdi]) for q in xrange(0, X.shape[1])])
         return
       
+    def get_one_dimensional_kernel(self, dimensions):
+        """
+        Specially intended for the grid regression case
+        For a given covariance kernel, this method returns the corresponding kernel for
+        a single dimension. The resulting values can then be used in the algorithm for
+        reconstructing the full covariance matrix.
+        """
+        raise NotImplementedError("implement one dimensional variation of kernel")
+
+
 class Exponential(Stationary):
     def __init__(self, input_dim, variance=1., lengthscale=None, ARD=False, active_dims=None, name='Exponential'):
         super(Exponential, self).__init__(input_dim, variance, lengthscale, ARD, active_dims, name)
