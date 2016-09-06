@@ -65,21 +65,39 @@ class Add(CombinationKernel):
             # if only one part is given
             which_parts = [which_parts]
         return reduce(np.add, (p.Kdiag(X) for p in which_parts))
-    
-    def dK_dX(self, X, X2=None):
+
+    @Cache_this(limit=3, force_kwargs=['which_parts'])  
+    def dK_dX(self, X, X2=None, which_parts=None):
+        if which_parts is None:
+            which_parts = self.parts
+        elif not isinstance(which_parts, (list, tuple)):
+            # if only one part is given
+            which_parts = [which_parts]
         return reduce(np.add, (p.dK_dX(X, X2) for p in self.parts))
    
-    def dK_dX2(self, X, X2=None):
+    @Cache_this(limit=3, force_kwargs=['which_parts'])
+    def dK_dX2(self, X, X2=None, which_parts=None):
+        if which_parts is None:
+            which_parts = self.parts
+        elif not isinstance(which_parts, (list, tuple)):
+            # if only one part is given
+            which_parts = [which_parts]
         return reduce(np.add, (p.dK_dX2(X, X2) for p in self.parts))
     
-    def dK2_dXdX2(self, X, X2=None):
+    @Cache_this(limit=3, force_kwargs=['which_parts'])
+    def dK2_dXdX2(self, X, X2=None, which_parts=None):
+        if which_parts is None:
+            which_parts = self.parts
+        elif not isinstance(which_parts, (list, tuple)):
+            # if only one part is given
+            which_parts = [which_parts]
         return reduce(np.add, (p.dK2_dXdX2(X, X2) for p in self.parts))
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
-        [p.update_gradients_full(dL_dK, X, X2) for p in self.parts if not p.is_fixed]
+    def update_gradients_full(self, dL_dK, X, X2=None, Xd=None, Xdi=None, X2d=None, X2di=None):
+        [p.update_gradients_full(dL_dK, X, X2=X2, Xd=Xd, Xdi=Xdi, X2d=X2d, X2di=X2di) for p in self.parts if not p.is_fixed]
 
-    def update_gradients_diag(self, dL_dK, X):
-        [p.update_gradients_diag(dL_dK, X) for p in self.parts]
+    def update_gradients_diag(self, dL_dK, X,  Xd=None, Xdi=None):
+        [p.update_gradients_diag(dL_dK, X,  Xd, Xdi) for p in self.parts]
 
     def gradients_X(self, dL_dK, X, X2=None):
         """Compute the gradient of the objective function with respect to X.

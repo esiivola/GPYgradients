@@ -98,7 +98,7 @@ def _slice_update_gradients_full(f):
     @wraps(f)
     def wrap(self, dL_dK, X, X2=None, Xd=None, Xdi=None, X2d=None, X2di=None):
         with _Slice_wrap(self, X, X2) as s:
-            ret = f(self, dL_dK, s.X, s.X2)
+            ret = f(self, dL_dK, s.X, s.X2, Xd, Xdi, X2d, X2di)
         return ret
     return wrap
 

@@ -96,9 +96,9 @@ class Linear(Kern):
 	    X2 = X
 	if self.ARD:
 	    I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
-	    return tmp*I*(X2.swapaxes(0,1))[None,:,None,:]
+	    return np.zeros((X.shape[1], X2.shape[1], X.shape[0], X2.shape[0]))+ tmp*I*(X2.swapaxes(0,1))[None,:,None,:]
 	else:
-	    return tmp*(X2.swapaxes(0,1))[:,None,:]
+	    return np.zeros((X2.shape[1], X.shape[0], X2.shape[0]))+tmp*(X2.swapaxes(0,1))[:,None,:]
 	
     def dK2_dvariancesdX2(self, X, X2=None):
 	tmp = 1.0
@@ -107,9 +107,9 @@ class Linear(Kern):
 	    X2 = X
 	if self.ARD:
 	    I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
-	    return tmp*I*(X.swapaxes(0,1))[None,:,:,None]
+	    return np.zeros((X.shape[1], X2.shape[1], X.shape[0], X2.shape[0]))+tmp*I*(X.swapaxes(0,1))[None,:,:,None]
 	else:
-	    return tmp*(X.swapaxes(0,1))[:,:,None]
+	    return np.zeros((X2.shape[1], X.shape[0], X2.shape[0]))+ tmp*(X.swapaxes(0,1))[:,:,None]
 	
     def dK3_dvariancesdXdX2(self, X, X2=None):
 	tmp = 1.0
