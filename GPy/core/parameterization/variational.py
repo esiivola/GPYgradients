@@ -10,7 +10,7 @@ from .param import Param
 from paramz.transformations import Logexp, Logistic,__fixed__
 
 class VariationalPrior(Parameterized):
-    def __init__(self, name='latent space', **kw):
+    def __init__(self, name='latent prior', **kw):
         super(VariationalPrior, self).__init__(name=name, **kw)
 
     def KL_divergence(self, variational_posterior):
@@ -23,6 +23,9 @@ class VariationalPrior(Parameterized):
         raise NotImplementedError("override this for variational inference of latent space")
 
 class NormalPrior(VariationalPrior):
+    def __init__(self, name='normal_prior', **kw):
+        super(VariationalPrior, self).__init__(name=name, **kw)
+
     def KL_divergence(self, variational_posterior):
         var_mean = np.square(variational_posterior.mean).sum()
         var_S = (variational_posterior.variance - np.log(variational_posterior.variance)).sum()
@@ -32,6 +35,91 @@ class NormalPrior(VariationalPrior):
         # dL:
         variational_posterior.mean.gradient -= variational_posterior.mean
         variational_posterior.variance.gradient -= (1. - (1. / (variational_posterior.variance))) * 0.5
+
+class GmmNormalPrior(VariationalPrior):
+    def __init__(self, px_mu, px_var, pi, n_component, variational_pi, name="GMMNormalPrior", **kw):
+        super(GmmNormalPrior, self).__init__(name=name, **kw)
+        self.n_component = n_component
+        
+        self.px_mu = Param('mu_k', px_mu)
+        self.px_var = Param('var_k', px_var)
+
+        # Make sure they sum to one
+        variational_pi = variational_pi / np.sum(variational_pi)
+        pi = pi / np.sum(pi)
+
+        self.pi = pi # p(x) mixing coeffients 
+        self.variational_pi = Param('variational_pi', variational_pi) # variational mixing coefficients 
+        
+        self.check_all_weights()
+
+        self.link_parameter(self.px_mu)
+        self.link_parameter(self.px_var)
+        self.link_parameter(self.variational_pi)
+        self.variational_pi.constrain_bounded(0.0, 1.0)
+
+        self.stop = 5
+
+    def KL_divergence(self, variational_posterior):
+        # Lagrange multiplier maybe also needed here
+
+        # var_mean = np.square(variational_posterior.mean).sum()
+        # var_S = (variational_posterior.variance - np.log(variational_posterior.variance)).sum()
+        # return 0.5 * (var_mean + var_S) - 0.5 * variational_posterior.input_dim * variational_posterior.num_data
+    
+        mu = variational_posterior.mean
+        S = variational_posterior.variance
+        pi = self.variational_pi
+        total_n = variational_posterior.input_dim * variational_posterior.num_data
+
+        cita = np.zeros(4)
+        for i in range(self.n_component):
+            cita[0] += (pi[i] * np.log(self.px_var[i])).sum()
+            cita[1] += (pi[i] * S / self.px_var[i]).sum()
+            cita[2] += (pi[i] * np.square(mu - self.px_mu[i]) / self.px_var[i]).sum()
+            cita[3] += (pi[i] * np.log(self.pi / pi[i])).sum()
+        return 0.5 * (cita[0] - (np.log(S)).sum() + cita[1]) + 0.5 * (cita[2] - total_n) + cita[3]
+
+    def update_gradients_KL(self, variational_posterior):
+        # import pdb; pdb.set_trace() # breakpoint 1
+        # print("Updating Gradients")
+        # if self.stop<1:
+        #     return
+        # self.stop-=1
+        #dL:
+        #variational_posterior.mean.gradient -= variational_posterior.mean
+        #variational_posterior.variance.gradient -= (1. - (1. / (variational_posterior.variance))) * 0.5
+        
+
+        mu = variational_posterior.mean
+        S = variational_posterior.variance
+        pi = self.variational_pi
+
+        cita_0 = np.zeros(mu.shape)
+        cita_1 = np.zeros(mu.shape)
+        cita_2 = np.zeros(mu.shape)
+        cita_3 = np.zeros(pi.shape)
+        for i in range(self.n_component):        
+            cita_0 += pi.values[i] * (mu - self.px_mu.values[i]) / self.px_var.values[i]     
+            cita_1 += (pi[i] / self.px_var[i])
+            cita_2 += pi[i] * (S + np.square(mu - self.px_mu[i])) / np.square(self.px_var[i])
+            self.px_mu[i].gradient += pi[i] * (mu - self.px_mu[i]) / self.px_var[i]
+            self.px_var[i].gradient += (pi[i] * (S + np.square(mu - self.px_mu[i])) / np.square(self.px_var[i]) - (pi[i] / self.px_var[i])) * 0.5
+            cita_3[i] = (np.log(self.px_var[i]).sum() + (S / self.px_var[i]).sum()+ (np.square(mu - self.px_mu[i]) / self.px_var[i]).sum() )* (-0.5) + np.log(self.pi[i] / pi[i]) - 1
+            # self.variational_pi[i].gradient += cita_3[i]
+
+        variational_posterior.mean.gradient -= cita_0
+        variational_posterior.variance.gradient += (1. / (S) - cita_1) * 0.5
+        self.variational_pi.gradient +=cita_3
+
+    def check_weights(self, weights):
+        assert weights.min() >= 0.0
+        assert weights.max() <= 1.0
+        assert weights.sum() == 1.0
+
+    def check_all_weights(self):
+        self.check_weights(self.variational_pi)
+        self.check_weights(self.pi)
 
 class SpikeAndSlabPrior(VariationalPrior):
     def __init__(self, pi=None, learnPi=False, variance = 1.0, group_spike=False, name='SpikeAndSlabPrior', **kw):
@@ -58,7 +146,7 @@ class SpikeAndSlabPrior(VariationalPrior):
             pi = self.pi[idx]
         else:
             pi = self.pi
-            
+
         var_mean = np.square(mu)/self.variance
         var_S = (S/self.variance - np.log(S))
         var_gamma = (gamma*np.log(gamma/pi)).sum()+((1-gamma)*np.log((1-gamma)/(1-pi))).sum()
@@ -163,12 +251,12 @@ class NormalPosterior(VariationalPosterior):
         """Compute the KL divergence to another NormalPosterior Object. This only holds, if the two NormalPosterior objects have the same shape, as we do computational tricks for the multivariate normal KL divergence.
         """
         return .5*(
-            np.sum(self.variance/other.variance) 
-            + ((other.mean-self.mean)**2/other.variance).sum() 
+            np.sum(self.variance/other.variance)
+            + ((other.mean-self.mean)**2/other.variance).sum()
             - self.num_data * self.input_dim
             + np.sum(np.log(other.variance)) - np.sum(np.log(self.variance))
             )
-    
+
 class SpikeAndSlabPosterior(VariationalPosterior):
     '''
     The SpikeAndSlab distribution for variational approximations.
@@ -190,11 +278,11 @@ class SpikeAndSlabPosterior(VariationalPosterior):
         else:
             self.gamma = Param("binary_prob",binary_prob,Logistic(1e-10,1.-1e-10))
             self.link_parameter(self.gamma)
-            
+
     def propogate_val(self):
         if self.group_spike:
             self.gamma.values[:] = self.gamma_group.values
-    
+
     def collate_gradient(self):
         if self.group_spike:
             self.gamma_group.gradient = self.gamma.gradient.reshape(self.gamma.shape).sum(axis=0)

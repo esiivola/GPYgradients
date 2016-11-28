@@ -1,5 +1,108 @@
 # Changelog
 
+## v1.5.6 (2016-11-07)
+
+### New
+
+* Added ploy basis kernel tests and import. [mzwiessele]
+
+* Gitchangelogrc. [mzwiessele]
+
+### Changes
+
+* Added polynomial basis func kernel. [mzwiessele]
+
+### Fix
+
+* Installation #451. [Max Zwiessele]
+
+* Pandoc install under travis osx. [mzwiessele]
+
+* Pandoc install under travis osx. [mzwiessele]
+
+* Pypi changing to pypi.org. [mzwiessele]
+
+### Other
+
+* Bump version: 1.5.5 → 1.5.6. [mzwiessele]
+
+* Merge pull request #448 from thangbui/devel. [Max Zwiessele]
+
+  Added pep.py -- Sparse Gaussian processes using Power Expectation Propagation
+
+* Renamed pep test scripts. [Thang Bui]
+
+* Fixed seed in pep test script #448. [Thang Bui]
+
+* Added tests. [Thang Bui]
+
+* Added pep.py -- Sparse Gaussian processes using Power Expectation Propagation. [Thang Bui]
+
+  This allows interpolation between FITC (EP or alpha = 1), and Titsias&#x27;s variational (VarDTC, VFE when alpha = 0).
+
+* Merge pull request #452 from SheffieldML/setupreq. [Max Zwiessele]
+
+  fix: Installation #451
+
+* Merge pull request #447 from SheffieldML/polinomial. [Max Zwiessele]
+
+  Polynomial
+
+* Merge branch &#x27;devel&#x27; into polinomial. [mzwiessele]
+
+* Merge pull request #449 from SheffieldML/deploy. [Max Zwiessele]
+
+  Deploy
+
+* Update setup.py. [Mike Croucher]
+
+* Merge pull request #446 from SheffieldML/devel. [Max Zwiessele]
+
+  newest patch fixing some issues
+
+* Merge branch &#x27;devel&#x27; of github.com:SheffieldML/GPy into devel. [mzwiessele]
+
+* Merge branch &#x27;deploy&#x27; into devel. [Max Zwiessele]
+
+* Merge pull request #442 from SheffieldML/devel. [Max Zwiessele]
+
+  New Major for GPy
+
+* Merge pull request #426 from SheffieldML/devel. [Max Zwiessele]
+
+  some fixes from issues and beckdaniels warped gp improvements
+
+
+## v1.5.5 (2016-10-03)
+
+### Other
+
+* Bump version: 1.5.4 → 1.5.5. [Max Zwiessele]
+
+
+## v1.5.4 (2016-10-03)
+
+### Changes
+
+* Version update on paramz. [Max Zwiessele]
+
+* Fixed naming in variational priors : [Max Zwiessele]
+
+### Fix
+
+* Bug in dataset (in fn download_url) which wrongly interprets the Content-Length meta data, and just takes first character. [Michael T Smith]
+
+### Other
+
+* Bump version: 1.5.3 → 1.5.4. [Max Zwiessele]
+
+* Merge pull request #443 from SheffieldML/dataset_download_url_bugfix. [Max Zwiessele]
+
+  fix: Bug in datasets.py
+
+* Merge branch &#x27;kurtCutajar-devel&#x27; into devel. [mzwiessele]
+
+
 ## v1.5.3 (2016-09-06)
 
 ### Other
@@ -717,6 +820,11 @@
 * Update setup.py. [Max Zwiessele]
 
 * [coverage] some more restrictions. [Max Zwiessele]
+
+
+## v1.0.5 (2016-04-08)
+
+### Other
 
 * Merge pull request #365 from SheffieldML/devel. [Max Zwiessele]
 
