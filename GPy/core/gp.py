@@ -83,15 +83,15 @@ class GP(Model):
 
         assert isinstance(likelihood, likelihoods.Likelihood)
         self.likelihood = likelihood
-	
-	if (Xd is not None):
-	    assert (Yd is not None)
-	    if (di is None):
-		di = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
-	    assert ( (Xd.shape == di.shape) and (Xd.shape == Yd.shape))
-	self.Xd = Xd
-	self.Yd = Yd
-	self.di = di
+
+        if (Xd is not None):
+            assert (Yd is not None)
+            if (di is None):
+                di = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
+            assert ( (Xd.shape == di.shape) and (Xd.shape == Yd.shape))
+        self.Xd = Xd
+        self.Yd = Yd
+        self.di = di
 	
         if self.kern._effective_input_dim != self.X.shape[1]:
             warnings.warn("Your kernel has a different input dimension {} then the given X dimension {}. Be very sure this is what you want and you have not forgotten to set the right input dimenion in your kernel".format(self.kern._effective_input_dim, self.X.shape[1]))

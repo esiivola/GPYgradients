@@ -37,13 +37,13 @@ class ExactGaussianInference(LatentFunctionInference):
         YYT_factor = Y-m
 
         if (K is None):
-	    if Xd is None:
-		K = kern.K(X)
-	    else:
-		K = kern.Kd(X, Xd=Xd, Xdi=di, X2=X, X2d=Xd, X2di=di)
-		if (Yd is None) or not (Xd.shape == Yd.shape) or not (Xd.shape == di.shape):
-		    raise AttributeError("Values and indices for derivative observations not given or they are of wrong size")
-		YYT_factor = np.array(np.bmat([[YYT_factor], [np.array([(Yd.reshape(-1))[np.nonzero(di.T.reshape(-1))]]).T]]))
+            if Xd is None:
+                K = kern.K(X)
+            else:
+                K = kern.Kd(X, Xd=Xd, Xdi=di, X2=X, X2d=Xd, X2di=di)
+                if (Yd is None) or not (Xd.shape == Yd.shape) or not (Xd.shape == di.shape):
+                    raise AttributeError("Values and indices for derivative observations not given or they are of wrong size")
+                YYT_factor = np.array(np.bmat([[YYT_factor], [np.array([(Yd.reshape(-1))[np.nonzero(di.T.reshape(-1))]]).T]]))
         Ky = K.copy()
         diag.add(Ky, variance+1e-8)
 

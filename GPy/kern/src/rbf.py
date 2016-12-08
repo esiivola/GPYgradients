@@ -33,12 +33,15 @@ class RBF(Stationary):
 
     def K_of_r(self, r):
         return self.variance * np.exp(-0.5 * r**2)
+    
+    def K_of_r_dbg(self, r, variance):
+        return variance * np.exp(-0.5 * r**2)
 
     def dK_dr(self, r):
         return -r*self.K_of_r(r)
     
     def dK_dvariance(self, r):
-	return np.exp(-0.5 * r**2)
+        return np.exp(-0.5 * r**2)
 
     def dK2_drdr(self, r):
         return (r**2-1)*self.K_of_r(r)
@@ -47,7 +50,7 @@ class RBF(Stationary):
         return (3.0-r**2)*r*self.K_of_r(r)
       
     def dk4_drdrdrdr(self, r):
-	return (3.0 -6.0*r**2 +r**4)*self.K_of_r(r)
+        return (3.0 -6.0*r**2 +r**4)*self.K_of_r(r)
 
     def dK2_dvariancedr(self, r):
         return -r * np.exp(-0.5 * r**2)

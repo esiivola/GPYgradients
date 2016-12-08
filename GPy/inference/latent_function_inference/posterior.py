@@ -242,10 +242,10 @@ class Posterior(object):
 class PosteriorExact(Posterior):
      
     def _raw_predict(self, kern, Xnew, pred_var, full_cov=False, Xd=None, di=None):
-	if (Xd is None):
-	    Kx = kern.K(pred_var, Xnew)
-	else:
-	    Kx = kern.Kd(pred_var, Xd=Xd, Xdi=di, X2=Xnew)
+        if (Xd is None):
+            Kx = kern.K(pred_var, Xnew)
+        else:
+            Kx = kern.Kd(pred_var, Xd=Xd, Xdi=di, X2=Xnew)
         mu = np.dot(Kx.T, self.woodbury_vector)
         if len(mu.shape)==1:
             mu = mu.reshape(-1,1)

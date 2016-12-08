@@ -90,25 +90,25 @@ class Kern(Parameterized):
         raise NotImplementedError
 
     def Kd(self, X, Xd=None, Xdi=None, X2=None, X2d=None, X2di=None):
-	if X2 is None:
-	    X2 = X
+        if X2 is None:
+            X2 = X
         if (Xd is not None) and (Xdi is None):
             Xdi = np.ones((Xd.shape[0], Xd.shape[1]), dtype=bool)
         if (X2d is not None) and (X2di is None):
             X2di = np.ones((X2d.shape[0], X2d.shape[1]), dtype=bool)
         #Transform the boolean matrices to index vectors:
         if Xdi is not None:
-	    xdi = np.nonzero(Xdi.T.reshape(-1))[0]
-	if X2di is not None:
-	    x2di = np.nonzero(X2di.T.reshape(-1))[0]    
+            xdi = np.nonzero(Xdi.T.reshape(-1))[0]
+        if X2di is not None:
+            x2di = np.nonzero(X2di.T.reshape(-1))[0]    
         K = self.K(X, X2)
         if X2d is not None:
-	    K = np.concatenate((K, (self.dK_dX2(X, X2d).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]), axis=1)
+            K = np.concatenate((K, (self.dK_dX2(X, X2d).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]), axis=1)
         if Xd is not None:
-	    K2 = (self.dK_dX(Xd, X2).reshape((-1,X2.shape[0])))[xdi,:]
-	    if X2d is not None:
-		K2 = np.concatenate((K2, (self.dK2_dXdX2(Xd, X2d).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]), axis=1)
-	    K = np.concatenate((K, K2), axis=0)
+            K2 = (self.dK_dX(Xd, X2).reshape((-1,X2.shape[0])))[xdi,:]
+        if X2d is not None:
+            K2 = np.concatenate((K2, (self.dK2_dXdX2(Xd, X2d).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]), axis=1)
+        K = np.concatenate((K, K2), axis=0)
         return K
 
     def Kdiag(self, X):
@@ -121,13 +121,13 @@ class Kern(Parameterized):
         raise NotImplementedError
       
     def dK_dX(self, X, X2=None):
-	raise NotImplementedError
+        raise NotImplementedError
    
     def dK_dX2(self, X, X2=None):
-	raise NotImplementedError
+        raise NotImplementedError
     
     def dK2_dXdX2(self, X, X2=None):
-	raise NotImplementedError
+        raise NotImplementedError
     
     def psi0(self, Z, variational_posterior):
         """
