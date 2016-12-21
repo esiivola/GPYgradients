@@ -106,9 +106,9 @@ class Kern(Parameterized):
             K = np.concatenate((K, (self.dK_dX2(X, X2d).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]), axis=1)
         if Xd is not None:
             K2 = (self.dK_dX(Xd, X2).reshape((-1,X2.shape[0])))[xdi,:]
-        if X2d is not None:
-            K2 = np.concatenate((K2, (self.dK2_dXdX2(Xd, X2d).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]), axis=1)
-        K = np.concatenate((K, K2), axis=0)
+            if X2d is not None:
+                K2 = np.concatenate((K2, (self.dK2_dXdX2(Xd, X2d).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]), axis=1)
+            K = np.concatenate((K, K2), axis=0)
         return K
 
     def Kdiag(self, X):

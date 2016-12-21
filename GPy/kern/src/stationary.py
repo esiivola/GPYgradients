@@ -266,7 +266,7 @@ class Stationary(Kern):
         else:
             r = self._scaled_dist(X, X2)
             return -np.sum(dL_dr*r)/self.lengthscale
-	    
+      
     def dK2_dvariancedX(self, X, X2):
         r = self._scaled_dist(X, X2)
         dk2_dvariancedr = self.dK2_dvariancedr(r)
@@ -316,7 +316,7 @@ class Stationary(Kern):
         dk3_dvariancedrdr = self.dK3_dvariancedrdr(r)
         dk2_dvariancedr = self.dK2_dvariancedr(r)
         tmp = dk2_dvariancedr[None,None,:,:]*dr2_dxdx2[:,:,:,:]
-        tmp[:,:,(self._inv_dist(X, X2)) == 0.] += dr2_dxdx2[:,:,(self._inv_dist(X, X2)) == 0.]
+        tmp[:,:,(self._inv_dist(X, X2)) == 0.] += dr2_dxdx2[:,:,(self._inv_dist(X, X2)) == 0.]/self.variance
         return tmp + dk3_dvariancedrdr[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:]
 
     def dK3_dlengthscaledXdX2(self, X, X2):
@@ -695,13 +695,8 @@ class Stationary(Kern):
                 self.lengthscale.gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dlengthscaledX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in range(0, X.shape[1])])
                 if X2d is not None:
                     self.lengthscale.gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dlengthscaledXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in range(0, X.shape[1])])
-        delta = 0.0001
-        r1_dbg = self._scaled_dist_dbg( X, X2, self.lengthscale)
-        r2_dbg = self._scaled_dist_dbg( X, X2, self.lengthscale+delta)
-        K1 = self.K_of_r(r1_dbg)
-        K2 = self.K_of_r(r2_dbg)
-        print(np.sum(K2-K1)/delta)
-        print(self.lengthscale.gradient)
+        #print(self.lengthscale.gradient)
+        #print(self.variance.gradient)
         return
     
     def update_gradients_diag(self, dL_dKdiag, X, Xd=None, Xdi=None):
