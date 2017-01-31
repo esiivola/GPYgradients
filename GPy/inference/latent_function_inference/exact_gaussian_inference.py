@@ -43,7 +43,7 @@ class ExactGaussianInference(LatentFunctionInference):
                 K = kern.Kd(X, Xd=Xd, Xdi=di, X2=X, X2d=Xd, X2di=di)
                 if (Yd is None) or not (Xd.shape == Yd.shape) or not (Xd.shape == di.shape):
                     raise AttributeError("Values and indices for derivative observations not given or they are of wrong size")
-                YYT_factor = np.array(np.bmat([[YYT_factor], [np.array([(Yd.reshape(-1))[np.nonzero(di.T.reshape(-1))]]).T]]))
+                YYT_factor = np.array(np.bmat([[YYT_factor], [np.array([(Yd.T.reshape(-1))[np.nonzero(di.T.reshape(-1))]]).T]]))
         Ky = K.copy()
         diag.add(Ky, variance+1e-8)
 
@@ -61,7 +61,6 @@ class ExactGaussianInference(LatentFunctionInference):
         dL_dK = 0.5 * (tdot(alpha) - Y.shape[1] * Wi)
 
         dL_dthetaL = likelihood.exact_inference_gradients(np.diag(dL_dK), Y_metadata)
-
         return Posterior(woodbury_chol=LW, woodbury_vector=alpha, K=K), log_marginal, {'dL_dK':dL_dK, 'dL_dthetaL':dL_dthetaL, 'dL_dm':alpha}
 
     def LOO(self, kern, X, Y, likelihood, posterior, Y_metadata=None, K=None):
