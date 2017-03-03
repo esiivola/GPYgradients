@@ -160,12 +160,28 @@ class StdPeriodic(Kern):
     def dK_dperiod(self, X, X2=None):
         if X2 is None:
             X2=X
-        periodinv = np.ones(X.shape[1])/(self.period)
+        periodinv = 1/self.period
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist *periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
-        return self.variance*exp_dist*np.sum(np.pi/2.*dist*np.sin(2.*base), axis=0) if not self.ARD1 else self.variance*exp_dist[None,:,:]*np.pi/2.*dist*np.sin(2.*base)
-      
+        return self.variance*exp_dist*np.sum(np.sin(base)*np.cos(base)*base/self.period[:,None,None]/(self.lengthscale[:,None,None]**2), axis=0) if not self.ARD1 else self.variance*exp_dist[None,:,:]*np.sin(base)*np.cos(base)*base/self.period[:,None,None]/(self.lengthscale[:,None,None]**2);
+ #####
+        #base = np.pi * (X[:, None, :] - X2[None, :, :]) / self.period
+
+        #sin_base = np.sin( base )
+        #exp_dist = np.exp( -0.5* np.sum( np.square(  sin_base / self.lengthscale ), axis = -1 ) )
+
+        #dwl = self.variance * (1.0/np.square(self.lengthscale)) * sin_base*np.cos(base) * (base / self.period)
+
+        #dl = self.variance * np.square( sin_base) / np.power( self.lengthscale, 3)
+
+        #vargra = np.sum(exp_dist * dL_dK)
+
+        #if self.ARD1: # different periods
+            #pergra = (dwl * exp_dist[:,:,None] * dL_dK[:, :, None]).sum(0).sum(0)
+ 
+ 
+ 
     def dK2_dvariancedX(self, X, X2=None):
         if X2 is None:
           X2=X
@@ -338,30 +354,7 @@ class StdPeriodic(Kern):
                 self.period.gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dperioddX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in xrange(0, X.shape[1])])
                 if X2d is not None:
                     self.period.gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dperioddXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in xrange(0, X.shape[1])])
-
-            #base = np.pi * (X[:, None, :] - X2[None, :, :]) / self.period
-
-            #sin_base = np.sin( base )
-            #exp_dist = np.exp( -0.5* np.sum( np.square(  sin_base / self.lengthscale ), axis = -1 ) )
-
-            #dwl = self.variance * (1.0/np.square(self.lengthscale)) * sin_base*np.cos(base) * (base / self.period)
-
-            #dl = self.variance * np.square( sin_base) / np.power( self.lengthscale, 3)
-
-            #self.variance.gradient = np.sum(exp_dist * dL_dK)
-            #target[0] += np.sum( exp_dist * dL_dK)
-
-            #if self.ARD1: # different periods
-            #    self.period.gradient = (dwl * exp_dist[:,:,None] * dL_dK[:, :, None]).sum(0).sum(0)
-            #else:  # same period
-            #    self.period.gradient = np.sum(dwl.sum(-1) * exp_dist * dL_dK)
-
-            #if self.ARD2: # different lengthscales
-            #    self.lengthscale.gradient = (dl * exp_dist[:,:,None] * dL_dK[:, :, None]).sum(0).sum(0)
-            #else: # same lengthscales
-            #    self.lengthscale.gradient = np.sum(dl.sum(-1) * exp_dist * dL_dK)
-
-            return
+        return
 
     def update_gradients_diag(self, dL_dKdiag, X):
         """derivative of the diagonal of the covariance matrix with respect to the parameters."""
