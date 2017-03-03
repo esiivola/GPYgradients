@@ -150,7 +150,7 @@ class StdPeriodic(Kern):
     def dK_dlengthscale(self, X, X2=None):
         if X2 is None:
             X2=X
-            lengthscale3inv = 1./(self.lengthscale**3)
+        lengthscale3inv = 1./(self.lengthscale**3)
         periodinv = np.ones(X.shape[1])/(self.period)
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist *periodinv[:,None,None]
@@ -185,12 +185,12 @@ class StdPeriodic(Kern):
         base = np.pi * dist *periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
         I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
-        return np.pi*self.variance*lengthscale3inv[:,None,None]*periodinv[:,None,None]*np.sin(2.*base)*exp_dist[None,:,:]*(1-0.5*self.lengthscale*np.sum(lengthscale3inv[:,None,None]*np.sin(base)**2,  axis=0)) if not self.ARD2 else np.pi*self.variance*lengthscale3inv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2.*base[None,:,:,:])*exp_dist[None,None,:,:](I-0.5*(np.sin(base[:,None,:,:])**2)*lengthscale2inv[None,:,None,None])
+        return np.pi*self.variance*lengthscale3inv[:,None,None]*periodinv[:,None,None]*np.sin(2.*base)*exp_dist[None,:,:]*(1-0.5*self.lengthscale*np.sum(lengthscale3inv[:,None,None]*np.sin(base)**2,  axis=0)) if not self.ARD2 else np.pi*self.variance*lengthscale3inv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2.*base[None,:,:,:])*exp_dist[None,None,:,:]*(I-0.5*(np.sin(base[:,None,:,:])**2)*lengthscale2inv[None,:,None,None])
       
     def dK2_dperioddX(self, X, X2=None):
         if X2 is None:
             X2=X
-            lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+        lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
         periodinv = np.ones(X.shape[1])/(self.period)
         period2inv = np.ones(X.shape[1])/(self.period**2)
         period3inv = np.ones(X.shape[1])/(self.period**3)
@@ -266,9 +266,9 @@ class StdPeriodic(Kern):
         if self.ARD1:
             tmp1 = - 0.125*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[None,:,None,None,None]*periodinv[None,None,:,None,None]*dist[:,None,None,:,:]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:])*np.sin(2.*base[None,None,:,:,:])
             # i = j
-            tmp2 = 0.25*I[:,:,None,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[None,None,:,None,None]*( 2.*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]) + period2inv[:,None,None,:,:]*periodinv[None,None,:,:,:]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]))
+            tmp2 = 0.25*I[:,:,None,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[None,None,:,None,None]*( 2.*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]) + period2inv[:,None,None,None,None]*periodinv[None,None,:,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]))
             # i = k
-            tmp3 = I[:,None,:,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*periodinv[None,:,None,None,None]*( 0.5*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]) + 0.25*period2inv[:,None,None,:,:]*periodinv[None,:,None,:,:]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]))
+            tmp3 = I[:,None,:,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*periodinv[None,:,None,None,None]*( 0.5*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]) + 0.25*period2inv[:,None,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]))
             # j = k
             tmp4 = 0.5*I[None,:,:,:,:]*np.pi*lengthscale4inv[None,:,None,None,None]*period2inv[None,:,None,None,None]*dist[:,None,None,:,:]*np.cos(2.*base[None,:,None,:,:])*np.sin(2.*base[:,None,None,:,:])
             # i=j=k
