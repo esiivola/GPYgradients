@@ -305,39 +305,39 @@ class StdPeriodic(Kern):
         
         #Update lengthscale gradient
         if not self.ARD2:
-            self.lengthscale_gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dlengthscale(X, X2))
+            self.lengthscale.gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dlengthscale(X, X2))
             if X2d is not None:
-                self.lengthscale_gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dlengthscaledX2(X,X2)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
+                self.lengthscale.gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dlengthscaledX2(X,X2)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
             if Xd is not None:
-                self.lengthscale_gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dlengthscaledX(X,X2)).reshape((-1,X2.shape[0])))[xdi,:])
+                self.lengthscale.gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dlengthscaledX(X,X2)).reshape((-1,X2.shape[0])))[xdi,:])
                 if X2d is not None:
-                    self.lengthscale_gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dlengthscaledXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
+                    self.lengthscale.gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dlengthscaledXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
         else:
-            self.lengthscale_gradient = np.array([np.sum(dL_dK[None,:X.shape[0],:X2.shape[0]]*self.dK_dlengthscale(X, X2)[q,:,:]) for q in xrange(0, X.shape[1])])
+            self.lengthscale.gradient = np.array([np.sum(dL_dK[None,:X.shape[0],:X2.shape[0]]*self.dK_dlengthscale(X, X2)[q,:,:]) for q in xrange(0, X.shape[1])])
             if X2d is not None:
-                self.lengthscale_gradient += np.array([np.sum(dL_dK[None,None,:X.shape[0],X2.shape[0]:]*((self.dK2_dlengthscaledX2(X,X2d)[q,:,:,:]).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]) for q in xrange(0, X.shape[1])])
+                self.lengthscale.gradient += np.array([np.sum(dL_dK[None,None,:X.shape[0],X2.shape[0]:]*((self.dK2_dlengthscaledX2(X,X2d)[q,:,:,:]).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]) for q in xrange(0, X.shape[1])])
             if Xd is not None:
-                self.lengthscale_gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dlengthscaledX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in xrange(0, X.shape[1])])
+                self.lengthscale.gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dlengthscaledX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in xrange(0, X.shape[1])])
                 if X2d is not None:
-                    self.lengthscale_gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dlengthscaledXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in xrange(0, X.shape[1])])
+                    self.lengthscale.gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dlengthscaledXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in xrange(0, X.shape[1])])
 
         #Update period gradient
         if not self.ARD1:
-            self.period_gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dperiod(X, X2))
+            self.period.gradient = np.sum(dL_dK[:X.shape[0],:X2.shape[0]]*self.dK_dperiod(X, X2))
             if X2d is not None:
-                self.period_gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dperioddX2(X,X2)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
+                self.period.gradient += np.sum(dL_dK[None,:X.shape[0],X2.shape[0]:]*((self.dK2_dperioddX2(X,X2)).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di])
             if Xd is not None:
-                self.period_gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dperioddX(X,X2)).reshape((-1,X2.shape[0])))[xdi,:])
+                self.period.gradient += np.sum(dL_dK[None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dperioddX(X,X2)).reshape((-1,X2.shape[0])))[xdi,:])
                 if X2d is not None:
-                    self.period_gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dperioddXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
+                    self.period.gradient += np.sum(dL_dK[None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dperioddXdX2(X, X2)).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di])
         else:
-            self.period_gradient = np.array([np.sum(dL_dK[None,:X.shape[0],:X2.shape[0]]*self.dK_dperiod(X, X2)[q,:,:]) for q in xrange(0, X.shape[1])])
+            self.period.gradient = np.array([np.sum(dL_dK[None,:X.shape[0],:X2.shape[0]]*self.dK_dperiod(X, X2)[q,:,:]) for q in xrange(0, X.shape[1])])
             if X2d is not None:
-                self.period_gradient += np.array([np.sum(dL_dK[None,None,:X.shape[0],X2.shape[0]:]*((self.dK2_dperioddX2(X,X2d)[q,:,:,:]).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]) for q in xrange(0, X.shape[1])])
+                self.period.gradient += np.array([np.sum(dL_dK[None,None,:X.shape[0],X2.shape[0]:]*((self.dK2_dperioddX2(X,X2d)[q,:,:,:]).swapaxes(0,1).reshape((X.shape[0],-1)))[:,x2di]) for q in xrange(0, X.shape[1])])
             if Xd is not None:
-                self.period_gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dperioddX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in xrange(0, X.shape[1])])
+                self.period.gradient += np.array([np.sum(dL_dK[None,None,X.shape[0]:,:X2.shape[0]]*((self.dK2_dperioddX(Xd,X2)[q,:,:,:]).reshape((-1,X2.shape[0])))[xdi,:]) for q in xrange(0, X.shape[1])])
                 if X2d is not None:
-                    self.period_gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dperioddXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in xrange(0, X.shape[1])])
+                    self.period.gradient += np.array([np.sum(dL_dK[None,None,None,X.shape[0]:,X2.shape[0]:]*((self.dK3_dperioddXdX2(Xd, X2d)[q,:,:,:,:]).swapaxes(1,2).reshape((Xd.shape[0]*X.shape[1], X2d.shape[0]*X2.shape[1])))[xdi,:][:, x2di]) for q in xrange(0, X.shape[1])])
 
             #base = np.pi * (X[:, None, :] - X2[None, :, :]) / self.period
 
