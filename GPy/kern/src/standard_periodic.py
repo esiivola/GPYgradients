@@ -122,24 +122,30 @@ class StdPeriodic(Kern):
         return ret
       
     def dK_dX(self, X, X2=None):
+        if X2 is None:
+            X2 = X
         lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
         periodinv = np.ones(X.shape[1])/(self.period)
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist * periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
-        return -self.variance*np.pi/2.*np.sin(2.*base)*exp_dist[None,:,:]*lengthscale2inv[:,None,None]*periodinv[:,None,None]
+        k = self.variance*exp_dist[None,:,:]
+        return -k*np.pi/2.*np.sin(2.*base)*lengthscale2inv[:,None,None]*periodinv[:,None,None]
    
     def dK_dX2(self, X, X2=None):
         return -self.dK_dX(X, X2)
     
     def dK2_dXdX2(self, X, X2=None):
         lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
-        periodinv = lengthscale2inv = np.ones(X.shape[1])/(self.period)
+        periodinv  = np.ones(X.shape[1])/(self.period)
+        period2inv = np.ones(X.shape[1])/(self.period**2)
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist * periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
         I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
-        return self.variance*(np.pi**2)*(-1./4*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*periodinv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*exp_dist[None,None,:,:]+I*np.cos(2.*base[:,None,:,:])*exp_dist)
+        k = self.variance*exp_dist[None,None,:,:]
+        dk_dx2 = self.dK_dX2( X, X2)
+        return -dk_dx2[None,:,:,:]*np.pi/2.*lengthscale2inv[:,None,None,None]*periodinv[:,None,None,None]*np.sin(2.*base[:,None,:,:])+ I*k*(np.pi**2)*period2inv[:,None,None,None]*lengthscale2inv[:,None,None,None]*np.cos(2.*base[:,None,:,:])
       
     def dK_dvariance(self, X, X2=None):
         if X2 is None:
@@ -150,12 +156,12 @@ class StdPeriodic(Kern):
     def dK_dlengthscale(self, X, X2=None):
         if X2 is None:
             X2=X
-        lengthscale3inv = 1./(self.lengthscale**3)
+        lengthscale3inv = np.ones(X.shape[1])/(self.lengthscale**3)
         periodinv = np.ones(X.shape[1])/(self.period)
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist *periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
-        return self.variance*np.sum((np.sin(base))**2, axis=0)*exp_dist*lengthscale3inv if not self.ARD2 else self.variance*(np.sin(base))**2*exp_dist[None,:,:]*lengthscale3inv[:,None,None]
+        return self.variance*np.sum((np.sin(base))**2, axis=0)*exp_dist*lengthscale3inv if not self.ARD2 else self.variance*exp_dist[None,:,:]*(np.sin(base))**2*lengthscale3inv[:,None,None]
       
     def dK_dperiod(self, X, X2=None):
         if X2 is None:
