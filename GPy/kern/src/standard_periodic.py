@@ -161,7 +161,7 @@ class StdPeriodic(Kern):
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist *periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
-        return self.variance*np.sum((np.sin(base))**2, axis=0)*exp_dist*lengthscale3inv if not self.ARD2 else self.variance*exp_dist[None,:,:]*(np.sin(base))**2*lengthscale3inv[:,None,None]
+        return self.variance*np.sum((np.sin(base))**2, axis=0)*exp_dist/(self.lengthscale**3) if not self.ARD2 else self.variance*exp_dist[None,:,:]*(np.sin(base))**2*lengthscale3inv[:,None,None]
       
     def dK_dperiod(self, X, X2=None):
         if X2 is None:
@@ -190,12 +190,13 @@ class StdPeriodic(Kern):
  
     def dK2_dvariancedX(self, X, X2=None):
         if X2 is None:
-          X2=X
-        base = np.rollaxis(np.pi * (X[:, None, :] - X2[None, :, :]) / self.period ,2,0)
-        exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+            X2 = X
         lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
-        periodinv = lengthscale2inv = np.ones(X.shape[1])/(self.period)
-        return np.pi/2*np.sin(2.*base)*exp_dist[None,:,:]*lengthscale2inv[:,None,None]*periodinv[:,None,None]
+        periodinv = np.ones(X.shape[1])/(self.period)
+        dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
+        base = np.pi * dist * periodinv[:,None,None]
+        exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+        return -exp_dist[None,:,:]*np.pi/2.*np.sin(2.*base)*lengthscale2inv[:,None,None]*periodinv[:,None,None]
     
     def dK2_dlengthscaledX(self, X, X2=None):
         if X2 is None:
@@ -219,11 +220,13 @@ class StdPeriodic(Kern):
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist *periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+        k = self.K(X,X2)
+        dk_dperiod = self.dK_dperiod(X,X2)
         I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
         if self.ARD1:
-            return self.variance*lengthscale2inv[:,None,None,None]*exp_dist[None,None,:,:]*(-0.25*lengthscale2inv[None,:,None,None]*period2inv[:,None,None,None]*periodinv[None,:,None,None]*(np.pi**2)*dist[:,None,:,:]*np.sin(2.*base[:,None,:,:])*np.sin(2.*base[None,:,:,:]) + I*(np.pi**2)*period3inv[:,None,None,None]*np.cos(2.*base[:,None,:,:])+0.5*I*np.pi*period2inv[:,None,None,None]*np.sin(2.*base[:,None,:,:]))
+            return -dk_dperiod[:,None,:,:]*np.pi*np.sin(2.*base[None,:,:,:])*lengthscale2inv[None,:,None,None]*periodinv[None,:,None,None]/2.+ I*k[None,None,:,:]*np.pi*lengthscale2inv[:,None,None,None]*period2inv[:,None,None,None]*(np.pi*np.cos(2.*base[None,:,:,:])*dist[None,:,:,:]*periodinv[:,None,None,None] + np.sin(2.*base[None,:,:,:])/2.)
         else:
-            return self.variance*np.pi*exp_dist[None,:,:]*lengthscale2inv[:,None,None]*(np.pi*period3inv[:,None,None]*np.cos(2.*base)*dist - 0.25*np.pi*period3inv[:,None,None]*np.sin(2.*base)*np.sum(dist*np.sin(2.*base)*lengthscale2inv[:,None,None], axis=0) +0.5*np.sin(2.*base)*period2inv[:,None,None])
+            return self.variance*exp_dist[None,:,:]*np.pi*lengthscale2inv[:,None,None]*(np.pi*period3inv[:,None,None]*np.cos(2.*base)*dist - 0.25*np.pi*period3inv[:,None,None]*np.sin(2.*base)*np.sum(dist*np.sin(2.*base)*lengthscale2inv[:,None,None], axis=0) +0.5*np.sin(2.*base)*period2inv[:,None,None])
       
     def dK2_dvariancedX2(self, X, X2=None):
         return -self.dK2_dvariancedX(X, X2)
@@ -237,11 +240,14 @@ class StdPeriodic(Kern):
     def dK3_dvariancedXdX2(self, X, X2=None):
         lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
         periodinv  = np.ones(X.shape[1])/(self.period)
+        period2inv = np.ones(X.shape[1])/(self.period**2)
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist * periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
         I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
-        return - (np.pi**2)/4*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*periodinv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*exp_dist[None,None,:,:]+I*np.cos(2.*base[:,None,:,:])*exp_dist
+        dk2_dvariancedx2 = self.dK2_dvariancedX2(X, X2)
+        dk_dvariance = self.dK_dvariance(X, X2)
+        return -dk2_dvariancedx2[None,:,:,:]*np.pi/2.*lengthscale2inv[:,None,None,None]*periodinv[:,None,None,None]*np.sin(2.*base[:,None,:,:])+ I*dk_dvariance[None,None,:,:]*(np.pi**2)*period2inv[:,None,None,None]*lengthscale2inv[:,None,None,None]*np.cos(2.*base[:,None,:,:])
     
     def dK3_dlengthscaledXdX2(self, X, X2=None):
         lengthscaleinv = np.ones(X.shape[1])/(self.lengthscale)
@@ -254,22 +260,36 @@ class StdPeriodic(Kern):
         dist = np.rollaxis(X[:, None, :] - X2[None, :, :],2,0)
         base = np.pi * dist * periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
+        k = self.variance*exp_dist;
+        dk2_dlengthgthscaledx2 = self.dK2_dlengthscaledX2(X, X2)
+        dk_dx2 = self.dK_dX2(X,X2)
+        dk_dlengthscale = self.dK_dlengthscale(X, X2)
         I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
         if self.ARD2:
-            tmp1 = -0.25*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*(np.sin(base[:,None,None,:,:])**2)*np.sin(2.*base[None,:,None,:,:])*np.sin(2.*base[None,None,:,:,:])
+            tmp1 =-dk2_dlengthgthscaledx2[:,None,:,:,:]*np.pi/2.*lengthscale2inv[None,:,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[None,:,None,:,:])
+            #-0.25*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*(np.sin(base[:,None,None,:,:])**2)*np.sin(2.*base[None,:,None,:,:])*np.sin(2.*base[None,None,:,:,:])
             # i = j
-            tmp2 = 0.5*I[:,:,None,:,:]*lengthscale2inv[None,None,:,None,None]*periodinv[:,None,None,None,None]*periodinv[None,None,:,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:])
-            # i = k
-            tmp3 = 0.5*I[:,None,:,:,:]*lengthscale2inv[None,:,None,None,None]*periodinv[:,None,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:])
+            tmp2 = I[:,:,None,:,:]*dk_dx2[None,None,:,:,:]*np.pi*lengthscale3inv[None,:,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[None,:,None,:,:])
+            #0.5*I[:,:,None,:,:]*lengthscale2inv[None,None,:,None,None]*periodinv[:,None,None,None,None]*periodinv[None,None,:,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:])
             # j = k
-            tmp4 = I[None,:,:,:,:]*lengthscale2inv[None,:,None,None,None]*period2inv[None,:,None,None,None]*np.cos(2.*base[None,:,None,:,:])*(np.sin(base[:,None,None,:,:])**2)
+            tmp3 = I[None,:,:,:,:]*dk_dlengthscale[:,None,None,:,:]*(np.pi**2)*lengthscale2inv[None,:,None,None,None]*period2inv[None,:,None,None,None]*np.cos(2.*base[None,:,None,:,:])
+            #0.5*I[:,None,:,:,:]*lengthscale2inv[None,:,None,None,None]*periodinv[:,None,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:])
+            # i = j = k
+            tmp4 = -2.*I[:,:,None,:,:]*I[:,None,:,:,:]*k[None,None,None,:,:]*(np.pi**2)*lengthscale3inv[:,None,None,None,None]*period2inv[:,None,None,None,None]*np.cos(2.*base[None,:,None,:,:])
+            #I[None,:,:,:,:]*lengthscale2inv[None,:,None,None,None]*period2inv[None,:,None,None,None]*np.cos(2.*base[None,:,None,:,:])*(np.sin(base[:,None,None,:,:])**2)
             # i=j=k
-            tmp5 = -2.*I[None,:,:,:,:]*I[:,None,:,:,:]*periodinv[:,None,None,None,None]*np.cos(2.*base[:,None,None,:,:])
-            return self.variance*(np.pi**2)*lengthscale3inv[:,None,None,None,None]*(tmp1+tmp2+tmp3+tmp4+tmp5)*exp_dist[None,None,None,:,:]
+            #tmp5 =
+            #-2.*I[None,:,:,:,:]*I[:,None,:,:,:]*periodinv[:,None,None,None,None]*np.cos(2.*base[:,None,None,:,:])
+            return tmp1+tmp2+tmp3+tmp4 
+            #self.variance*(np.pi**2)*lengthscale3inv[:,None,None,None,None]*(tmp1+tmp2+tmp3+tmp4+tmp5)*exp_dist[None,None,None,:,:]
         else:
-            tmp1 = periodinv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2.*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*(lengthscale5inv[:,None,None,None]-lengthscale4inv[:,None,None,None]*(np.sum((np.sin( base )**2) * lengthscale3inv[:,None,None], axis=0 )[None,None,:,:]))
-            tmp2 = I*lengthscale2inv[:,None,None,None]*period2inv[:,None,None,None]*((np.sin(base[:,None,:,:])**2)*(np.sum((np.sin( base )**2)*lengthscale3inv[:,None,None], axis=0 )[None,None,:,:]) + 2*lengthscaleinv + (np.cos(base[:,None,:,:])**2)*(np.sum((np.sin( base )**2)*lengthscale3inv[:,None,None], axis=0 )[None,None,:,:]))
-            return self.variance*(np.pi**2)*exp_dist[None,None,:,:]*(tmp1+tmp2)
+            tmp1 = -dk2_dlengthgthscaledx2[None,:,:,:]*np.pi/2.*lengthscale2inv[:,None,None,None]*periodinv[:,None,None,None]*np.sin(2.*base[:,None,:,:]) +dk_dx2[None,:,:,:]*np.pi*lengthscale3inv[:,None,None,None]*periodinv[:,None,None,None]*np.sin(2.*base[:,None,:,:])
+            #periodinv[:,None,None,None]*periodinv[None,:,None,None]*np.sin(2.*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*(lengthscale5inv[:,None,None,None]-lengthscale4inv[:,None,None,None]*(np.sum((np.sin( base )**2) * lengthscale3inv[:,None,None], axis=0 )[None,None,:,:]))
+            #i=j
+            tmp2 = I*(dk_dlengthscale[None,None,:,:]*(np.pi**2)*lengthscale2inv[:,None,None,None]*period2inv[:,None,None,None]*np.cos(2.*base[:,None,:,:]) -2.*k[None,None,:,:]*(np.pi**2)*lengthscale3inv[:,None,None,None]*period2inv[:,None,None,None]*np.cos(2.*base[:,None,:,:]))
+            #I*lengthscale2inv[:,None,None,None]*period2inv[:,None,None,None]*((np.sin(base[:,None,:,:])**2)*(np.sum((np.sin( base )**2)*lengthscale3inv[:,None,None], axis=0 )[None,None,:,:]) + 2*lengthscaleinv + (np.cos(base[:,None,:,:])**2)*(np.sum((np.sin( base )**2)*lengthscale3inv[:,None,None], axis=0 )[None,None,:,:]))
+            return tmp1+tmp2 
+            #self.variance*(np.pi**2)*exp_dist[None,None,:,:]*(tmp1+tmp2)
         
     def dK3_dperioddXdX2(self, X, X2=None):
         lengthscaleinv = np.ones(X.shape[1])/(self.lengthscale)
@@ -285,21 +305,33 @@ class StdPeriodic(Kern):
         base = np.pi * dist * periodinv[:,None,None]
         exp_dist = np.exp( -0.5* np.sum( np.square(  np.sin( base ) / self.lengthscale[:,None,None] ), axis = 0 ) )
         I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        k = self.variance*exp_dist[None,None,None,:,:]
+        dk2_dperioddx2 = self.dK2_dperioddX2(X, X2)
+        dk_dx2 = self.dK_dX2(X, X2)
+        dk_dperiod = self.dK_dperiod(X, X2)
         if self.ARD1:
-            tmp1 = - 0.125*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[None,:,None,None,None]*periodinv[None,None,:,None,None]*dist[:,None,None,:,:]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:])*np.sin(2.*base[None,None,:,:,:])
+            tmp1 = -dk2_dperioddx2[:,None,:,:,:]*np.pi/2.*lengthscale2inv[None,:,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[None,:,None,:,:])
+            #- 0.125*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[None,:,None,None,None]*periodinv[None,None,:,None,None]*dist[:,None,None,:,:]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:])*np.sin(2.*base[None,None,:,:,:])
             # i = j
-            tmp2 = 0.25*I[:,:,None,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[None,None,:,None,None]*( 2.*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]) + period2inv[:,None,None,None,None]*periodinv[None,None,:,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]))
-            # i = k
-            tmp3 = I[:,None,:,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*periodinv[None,:,None,None,None]*( 0.5*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]) + 0.25*period2inv[:,None,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]))
+            tmp2 = I[:,:,None,:,:]*dk_dx2[None,None,:,:]*(np.pi*lengthscale2inv[:,None,None,None,None]*period2inv[:,None,None,None,None]*np.sin(2.*base[None,:,None,:,:])/2. + (np.pi**2)*lengthscale2inv[:,None,None,None,None]*period3inv[:,None,None,None,None]*np.cos(2.*base[None,:,None,:,:])*dist[:,None,None,:,:])
+            #0.25*I[:,:,None,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,None,:,None,None]*periodinv[None,None,:,None,None]*( 2.*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]) + period2inv[:,None,None,None,None]*periodinv[None,None,:,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,None,:,:,:]))
             # j = k
-            tmp4 = 0.5*I[None,:,:,:,:]*np.pi*lengthscale4inv[None,:,None,None,None]*period2inv[None,:,None,None,None]*dist[:,None,None,:,:]*np.cos(2.*base[None,:,None,:,:])*np.sin(2.*base[:,None,None,:,:])
+            tmp3 = I[None,:,:,:,:]*dk_dperiod[:,None,None,:,:]*(np.pi**2)*period2inv[None,:,None,None,None]*lengthscale2inv[None,:,None,None,None]*np.cos(2.*base[None,:,None,:,:])
+            #I[:,None,:,:,:]*np.pi*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*periodinv[None,:,None,None,None]*( 0.5*periodinv[:,None,None,None,None]*dist[:,None,None,:,:]*np.cos(base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]) + 0.25*period2inv[:,None,None,None,None]*periodinv[None,:,None,None,None]*np.sin(2.*base[:,None,None,:,:])*np.sin(2.*base[None,:,None,:,:]))
+            #i=j=k
+            tmp4 = -2.*I[None,:,:,:,:]*I[:,None,:,:,:]*k*(np.pi**2)*lengthscale2inv[:,None,None,None,None]*(period3inv[:,None,None,None,None]*np.cos(2.*base[:,None,None,:,:])-np.pi*period4inv[:,None,None,None,None]*np.sin(2.*base[:,None,None,:,:])*dist[:,None,None,:,:])
+            #0.5*I[None,:,:,:,:]*np.pi*lengthscale4inv[None,:,None,None,None]*period2inv[None,:,None,None,None]*dist[:,None,None,:,:]*np.cos(2.*base[None,:,None,:,:])*np.sin(2.*base[:,None,None,:,:])
             # i=j=k
-            tmp5 = -2*I[None,:,:,:,:]*I[:,None,:,:,:]*np.cos(2.*base[:,None,None,:,:])*lengthscale2inv[:,None,None,None,None]*periodinv[:,None,None,None,None]
-            return self.variance*(np.pi**2)*exp_dist[None,None,None,:,:]*period2inv[:,None,None,None,None]*(tmp1+tmp2+tmp3+tmp4+tmp5)
+            #tmp5 =
+            #-2*I[None,:,:,:,:]*I[:,None,:,:,:]*np.cos(2.*base[:,None,None,:,:])*lengthscale2inv[:,None,None,None,None]*periodinv[:,None,None,None,None]
+            return tmp1+tmp2+tmp3+tmp4
+            #self.variance*(np.pi**2)*exp_dist[None,None,None,:,:]*period2inv[:,None,None,None,None]*(tmp1+tmp2+tmp3+tmp4+tmp5)
         else:
-            tmp1 = -0.5*self.variance*(np.pi**3)*exp_dist[None,None,:,:]*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*period4inv[:,None,None,None]*np.sin(2.*base[:,None,None,None]+2.*base[None,:,None,None]) +0.5*self.variance*(np.pi**2)*exp_dist[None,None,:,:]*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*period3inv[:,None,None,None]*np.sin(2.*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])-0.25*self.variance*(np.pi**2)*exp_dist[None,None,:,:]*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*period2inv[:,None,None,None]*np.sin(2.*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*(np.sum( 0.5*base*periodinv[:,None,None]*lengthscale2inv[:,None,None]*np.sin(2.*base) , axis=0 )[None,None,:,:])
+            tmp1 = np.pi*lengthscale2inv[:,None,None,None]/2.*(-dk2_dperioddx2[None,:,:,:]*periodinv[:,None,None,None]*np.sin(2.*base[:,None,:,:]) +dk_dx2[None,:,:,:]*period2inv[:,None,None,None]*np.sin(2.*base[:,None,:,:]) + np.pi*dk_dx2[None,:,:,:]*2.*period3inv[:,None,None,None]*np.cos(2.*base[:,None,:,:])*dist[:,None,:,:] )
+            #-0.5*self.variance*(np.pi**3)*exp_dist[None,None,:,:]*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*period4inv[:,None,None,None]*np.sin(2.*base[:,None,None,None]+2.*base[None,:,None,None]) +0.5*self.variance*(np.pi**2)*exp_dist[None,None,:,:]*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*period3inv[:,None,None,None]*np.sin(2.*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])-0.25*self.variance*(np.pi**2)*exp_dist[None,None,:,:]*lengthscale2inv[:,None,None,None]*lengthscale2inv[None,:,None,None]*period2inv[:,None,None,None]*np.sin(2.*base[:,None,:,:])*np.sin(2.*base[None,:,:,:])*(np.sum( 0.5*base*periodinv[:,None,None]*lengthscale2inv[:,None,None]*np.sin(2.*base) , axis=0 )[None,None,:,:])
             
-            tmp2 = I*self.variance*(np.pi**2)*exp_dist[None,None,:,:]*(-np.pi*2.*np.cos(2.*base[:,None,:,:])*lengthscale2inv[:,None,None,None]*period3inv[:,None,None,None] + 2.*np.pi*dist[:,None,:,:]*np.sin(2.*dist[:,None,None,None])*lengthscale2inv[:,None,None,None]*period4inv[:,None,None,None]+ lengthscale2inv[:,None,None,None]*period2inv[:,None,None,None]*np.cos(2.*base[:,None,:,:])*np.sum(0.5*dist[:,None,None]*np.sin(2.*base)*lengthscale2inv[:,None,None]*period2inv[:,None,None] ,axis=0))
+            tmp2 = I*(np.pi**2)*lengthscale2inv[:,None,None,None]*period2inv[:,None,None,None]*(dk_dperiod[None,None,:,:]*np.cos(2.*base[:,None,:,:]) -2.*k[None,None,:,:]*periodinv[:,None,None,None]*np.cos(2.*base[:,None,:,:]) +2.*k[None,None,:,:]*np.sin(2.*base[:,None,:,:])*np.pi*period2inv[:,None,None,None]*dist[:,None,:,:] )
+            #I*self.variance*(np.pi**2)*exp_dist[None,None,:,:]*(-np.pi*2.*np.cos(2.*base[:,None,:,:])*lengthscale2inv[:,None,None,None]*period3inv[:,None,None,None] + 2.*np.pi*dist[:,None,:,:]*np.sin(2.*dist[:,None,None,None])*lengthscale2inv[:,None,None,None]*period4inv[:,None,None,None]+ lengthscale2inv[:,None,None,None]*period2inv[:,None,None,None]*np.cos(2.*base[:,None,:,:])*np.sum(0.5*dist[:,None,None]*np.sin(2.*base)*lengthscale2inv[:,None,None]*period2inv[:,None,None] ,axis=0))
             return tmp1+tmp2
 
     def update_gradients_full(self, dL_dK, X, X2=None, Xd=None, Xdi=None, X2d=None, X2di=None):
