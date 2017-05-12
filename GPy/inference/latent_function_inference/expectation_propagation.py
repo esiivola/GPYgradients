@@ -256,71 +256,70 @@ class multioutputEP(EP):
         for i in xrange(0,len(likelihood_list)):
             likelihood = likelihood_list[i]
             Y = Y_list[i]
-            Y_metadata = Y_metadata_list[i]
             
-            num_data, data_dim = Y.shape
+        num_data, data_dim = Y.shape
 
-            # Makes computing the sign quicker if we work with numpy arrays rather
-            # than ObsArrays
-            Y = Y.values.copy()
+        # Makes computing the sign quicker if we work with numpy arrays rather
+        # than ObsArrays
+        Y = Y.values.copy()
 
-            #Initial values - Marginal moments
-            Z_hat = np.empty(num_data,dtype=np.float64)
-            mu_hat = np.empty(num_data,dtype=np.float64)
-            sigma2_hat = np.empty(num_data,dtype=np.float64)
+        #Initial values - Marginal moments
+        Z_hat = np.empty(num_data,dtype=np.float64)
+        mu_hat = np.empty(num_data,dtype=np.float64)
+        sigma2_hat = np.empty(num_data,dtype=np.float64)
 
-            tau_cav = np.empty(num_data,dtype=np.float64)
-            v_cav = np.empty(num_data,dtype=np.float64)
+        tau_cav = np.empty(num_data,dtype=np.float64)
+        v_cav = np.empty(num_data,dtype=np.float64)
 
-            #initial values - Gaussian factors
-            #Initial values - Posterior distribution parameters: q(f|X,Y) = N(f|mu,Sigma)
-            if self.old_mutilde is None:
-                tau_tilde, mu_tilde, v_tilde = np.zeros((3, num_data))
-                Sigma = K.copy()
-                diag.add(Sigma, 1e-7)
-                mu = np.zeros(num_data)
-            else:
-                assert self.old_mutilde.size == num_data, "data size mis-match: did you change the data? try resetting!"
-                mu_tilde, v_tilde = self.old_mutilde, self.old_vtilde
-                tau_tilde = v_tilde/mu_tilde
-                mu, Sigma, _ = self._ep_compute_posterior(K, tau_tilde, v_tilde)
-                diag.add(Sigma, 1e-7)
-                # TODO: Check the log-marginal under both conditions and choose the best one
+        #initial values - Gaussian factors
+        #Initial values - Posterior distribution parameters: q(f|X,Y) = N(f|mu,Sigma)
+        if self.old_mutilde is None:
+            tau_tilde, mu_tilde, v_tilde = np.zeros((3, num_data))
+            Sigma = K.copy()
+            diag.add(Sigma, 1e-7)
+            mu = np.zeros(num_data)
+        else:
+            assert self.old_mutilde.size == num_data, "data size mis-match: did you change the data? try resetting!"
+            mu_tilde, v_tilde = self.old_mutilde, self.old_vtilde
+            tau_tilde = v_tilde/mu_tilde
+            mu, Sigma, _ = self._ep_compute_posterior(K, tau_tilde, v_tilde)
+            diag.add(Sigma, 1e-7)
+            # TODO: Check the log-marginal under both conditions and choose the best one
 
-            #Approximation
-            tau_diff = self.epsilon + 1.
-            v_diff = self.epsilon + 1.
-            tau_tilde_old = np.nan
-            v_tilde_old = np.nan
-            iterations = 0
-            while ((tau_diff > self.epsilon) or (v_diff > self.epsilon)) and (iterations < self.max_iters):
-                
-                tau_tilde, v_tilde, tau_cav, v_cav = self._update_cavity(self, num_data, tau_cav, v_cav, tau_tilde, v_tilde, mu, Sigma, Y_metadata)
-                
-                #(re) compute Sigma and mu using full Cholesky decompy
-                mu, Sigma, _ = self._ep_compute_posterior(K, tau_tilde, v_tilde)
+        #Approximation
+        tau_diff = self.epsilon + 1.
+        v_diff = self.epsilon + 1.
+        tau_tilde_old = np.nan
+        v_tilde_old = np.nan
+        iterations = 0
+        while ((tau_diff > self.epsilon) or (v_diff > self.epsilon)) and (iterations < self.max_iters):
+            
+            tau_tilde, v_tilde, tau_cav, v_cav = self._update_cavity(self, num_data, tau_cav, v_cav, tau_tilde, v_tilde, mu, Sigma, Y_metadata)
+            
+            #(re) compute Sigma and mu using full Cholesky decompy
+            mu, Sigma, _ = self._ep_compute_posterior(K, tau_tilde, v_tilde)
 
-                #monitor convergence
-                if iterations > 0:
-                    tau_diff = np.mean(np.square(tau_tilde-tau_tilde_old))
-                    v_diff = np.mean(np.square(v_tilde-v_tilde_old))
-                tau_tilde_old = tau_tilde.copy()
-                v_tilde_old = v_tilde.copy()
+            #monitor convergence
+            if iterations > 0:
+                tau_diff = np.mean(np.square(tau_tilde-tau_tilde_old))
+                v_diff = np.mean(np.square(v_tilde-v_tilde_old))
+            tau_tilde_old = tau_tilde.copy()
+            v_tilde_old = v_tilde.copy()
 
-                iterations += 1
+            iterations += 1
 
-            mu_tilde = v_tilde/tau_tilde
-            mu_cav = v_cav/tau_cav
-            sigma2_sigma2tilde = 1./tau_cav + 1./tau_tilde
+        mu_tilde = v_tilde/tau_tilde
+        mu_cav = v_cav/tau_cav
+        sigma2_sigma2tilde = 1./tau_cav + 1./tau_tilde
 
-            # Z_tilde after removing the terms that can lead to infinite terms due to tau_tilde close to zero.
-            # This terms cancel with the coreresponding terms in the marginal loglikelihood
-            log_Z_tilde = (np.log(Z_hat) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+tau_tilde/tau_cav)
-                            - 0.5 * ((v_tilde)**2 * 1./(tau_cav + tau_tilde)) + 0.5*(v_cav * ( ( (tau_tilde/tau_cav) * v_cav - 2.0 * v_tilde ) * 1./(tau_cav + tau_tilde))))
-                            # - 0.5*np.log(tau_tilde) + 0.5*(v_tilde*v_tilde*1./tau_tilde)
+        # Z_tilde after removing the terms that can lead to infinite terms due to tau_tilde close to zero.
+        # This terms cancel with the coreresponding terms in the marginal loglikelihood
+        log_Z_tilde = (np.log(Z_hat) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+tau_tilde/tau_cav)
+                        - 0.5 * ((v_tilde)**2 * 1./(tau_cav + tau_tilde)) + 0.5*(v_cav * ( ( (tau_tilde/tau_cav) * v_cav - 2.0 * v_tilde ) * 1./(tau_cav + tau_tilde))))
+                        # - 0.5*np.log(tau_tilde) + 0.5*(v_tilde*v_tilde*1./tau_tilde)
 
-            self.old_mutilde = mu_tilde
-            self.old_vtilde = v_tilde
+        self.old_mutilde = mu_tilde
+        self.old_vtilde = v_tilde
 
         return mu, Sigma, mu_tilde, tau_tilde, log_Z_tilde
 
