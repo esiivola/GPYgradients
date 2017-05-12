@@ -120,40 +120,9 @@ class EP(EPBase, ExactGaussianInference):
         v_tilde_old = np.nan
         iterations = 0
         while ((tau_diff > self.epsilon) or (v_diff > self.epsilon)) and (iterations < self.max_iters):
-            update_order = np.random.permutation(num_data)
-            for i in update_order:
-                #Cavity distribution parameters
-                tau_cav[i] = 1./Sigma[i,i] - self.eta*tau_tilde[i]
-                v_cav[i] = mu[i]/Sigma[i,i] - self.eta*v_tilde[i]
-                if Y_metadata is not None:
-                    # Pick out the relavent metadata for Yi
-                    Y_metadata_i = {}
-                    for key in Y_metadata.keys():
-                        Y_metadata_i[key] = Y_metadata[key][i, :]
-                else:
-                    Y_metadata_i = None
-                #Marginal moments
-                Z_hat[i], mu_hat[i], sigma2_hat[i] = likelihood.moments_match_ep(Y[i], tau_cav[i], v_cav[i], Y_metadata_i=Y_metadata_i)
-                #Site parameters update
-                delta_tau = self.delta/self.eta*(1./sigma2_hat[i] - 1./Sigma[i,i])
-                delta_v = self.delta/self.eta*(mu_hat[i]/sigma2_hat[i] - mu[i]/Sigma[i,i])
-                tau_tilde_prev = tau_tilde[i]
-                tau_tilde[i] += delta_tau
-
-                # Enforce positivity of tau_tilde. Even though this is guaranteed for logconcave sites, it is still possible
-                # to get negative values due to numerical errors. Moreover, the value of tau_tilde should be positive in order to
-                # update the marginal likelihood without inestability issues.
-                if tau_tilde[i] < np.finfo(float).eps:
-                    tau_tilde[i] = np.finfo(float).eps
-                    delta_tau = tau_tilde[i] - tau_tilde_prev
-                v_tilde[i] += delta_v
-
-                if self.parallel_updates == False:
-                    #Posterior distribution parameters update
-                    ci = delta_tau/(1.+ delta_tau*Sigma[i,i])
-                    DSYR(Sigma, Sigma[:,i].copy(), -ci)
-                    mu = np.dot(Sigma, v_tilde)
-
+            
+            tau_cav, v_cav, tau_tilde, v_tilde, Z_hat = self._update_cavity(self, num_data, tau_cav, v_cav, tau_tilde, v_tilde, mu, Sigma, Y_metadata, , Z_hat, mu_hat, sigma2_hat)
+            
             #(re) compute Sigma and mu using full Cholesky decompy
             mu, Sigma, _ = self._ep_compute_posterior(K, tau_tilde, v_tilde)
 
@@ -180,7 +149,44 @@ class EP(EPBase, ExactGaussianInference):
         self.old_vtilde = v_tilde
 
         return mu, Sigma, mu_tilde, tau_tilde, log_Z_tilde
+    
+    def _update_cavity(self, num_data, tau_cav, v_cav, tau_tilde, v_tilde, mu, Sigma, Y_metadata, Z_hat, mu_hat, sigma2_hat )
+        update_order = np.random.permutation(num_data)
+        for i in update_order:
+            #Cavity distribution parameters
+            tau_cav[i] = 1./Sigma[i,i] - self.eta*tau_tilde[i]
+            v_cav[i] = mu[i]/Sigma[i,i] - self.eta*v_tilde[i]
+            if Y_metadata is not None:
+                # Pick out the relavent metadata for Yi
+                Y_metadata_i = {}
+                for key in Y_metadata.keys():
+                    Y_metadata_i[key] = Y_metadata[key][i, :]
+            else:
+                Y_metadata_i = None
+            #Marginal moments
+            Z_hat[i], mu_hat[i], sigma2_hat[i] = likelihood.moments_match_ep(Y[i], tau_cav[i], v_cav[i], Y_metadata_i=Y_metadata_i)
+            #Site parameters update
+            delta_tau = self.delta/self.eta*(1./sigma2_hat[i] - 1./Sigma[i,i])
+            delta_v = self.delta/self.eta*(mu_hat[i]/sigma2_hat[i] - mu[i]/Sigma[i,i])
+            tau_tilde_prev = tau_tilde[i]
+            tau_tilde[i] += delta_tau
 
+            # Enforce positivity of tau_tilde. Even though this is guaranteed for logconcave sites, it is still possible
+            # to get negative values due to numerical errors. Moreover, the value of tau_tilde should be positive in order to
+            # update the marginal likelihood without inestability issues.
+            if tau_tilde[i] < np.finfo(float).eps:
+                tau_tilde[i] = np.finfo(float).eps
+                delta_tau = tau_tilde[i] - tau_tilde_prev
+            v_tilde[i] += delta_v
+
+            if self.parallel_updates == False:
+                #Posterior distribution parameters update
+                ci = delta_tau/(1.+ delta_tau*Sigma[i,i])
+                DSYR(Sigma, Sigma[:,i].copy(), -ci)
+                mu = np.dot(Sigma, v_tilde)
+        return tau_cav, v_cav, tau_tilde, v_tilde, Z_hat
+                    
+                    
     def _ep_compute_posterior(self, K, tau_tilde, v_tilde):
         num_data = len(tau_tilde)
         tau_tilde_root = np.sqrt(tau_tilde)
@@ -220,6 +226,105 @@ class EP(EPBase, ExactGaussianInference):
 
         return Posterior(woodbury_inv=Wi, woodbury_vector=alpha, K=K), log_marginal, {'dL_dK':dL_dK, 'dL_dthetaL':dL_dthetaL, 'dL_dm':alpha}
 
+class multioutputEP(EP):
+    def inference(self, kern, X_list, likelihood_list, Y_list, mean_function_list=None, Y_metadata_list=None, precision=None, K=None):   
+        if self.always_reset:
+            self.reset()
+
+        if K is None:
+            K = kern.K(X_list)
+
+        if self.ep_mode=="nested":
+            #Force EP at each step of the optimization
+            self._ep_approximation = None
+            mu, Sigma, mu_tilde, tau_tilde, log_Z_tilde = self._ep_approximation = self.expectation_propagation(K, Y_list, likelihood_list, Y_metadata_list)
+        elif self.ep_mode=="alternated":
+            if getattr(self, '_ep_approximation', None) is None:
+                #if we don't yet have the results of runnign EP, run EP and store the computed factors in self._ep_approximation
+                mu, Sigma, mu_tilde, tau_tilde, log_Z_tilde = self._ep_approximation = self.expectation_propagation(K, Y_list, likelihood_list, Y_metadata_list)
+            else:
+                #if we've already run EP, just use the existing approximation stored in self._ep_approximation
+                mu, Sigma, mu_tilde, tau_tilde, log_Z_tilde = self._ep_approximation
+        else:
+            raise ValueError("ep_mode value not valid")
+
+        v_tilde = [m * t in m,t = zip(mu_tilde, tau_tilde)]
+        return self._inference(K, tau_tilde, v_tilde, likelihood, Y_metadata=Y_metadata,  Z_tilde=log_Z_tilde.sum())
+
+    def expectation_propagation(self, K, Y_list, likelihood_list, Y_metadata_list):
+
+        for i in xrange(0,len(likelihood_list)):
+            likelihood = likelihood_list[i]
+            Y = Y_list[i]
+            Y_metadata = Y_metadata_list[i]
+            
+            num_data, data_dim = Y.shape
+
+            # Makes computing the sign quicker if we work with numpy arrays rather
+            # than ObsArrays
+            Y = Y.values.copy()
+
+            #Initial values - Marginal moments
+            Z_hat = np.empty(num_data,dtype=np.float64)
+            mu_hat = np.empty(num_data,dtype=np.float64)
+            sigma2_hat = np.empty(num_data,dtype=np.float64)
+
+            tau_cav = np.empty(num_data,dtype=np.float64)
+            v_cav = np.empty(num_data,dtype=np.float64)
+
+            #initial values - Gaussian factors
+            #Initial values - Posterior distribution parameters: q(f|X,Y) = N(f|mu,Sigma)
+            if self.old_mutilde is None:
+                tau_tilde, mu_tilde, v_tilde = np.zeros((3, num_data))
+                Sigma = K.copy()
+                diag.add(Sigma, 1e-7)
+                mu = np.zeros(num_data)
+            else:
+                assert self.old_mutilde.size == num_data, "data size mis-match: did you change the data? try resetting!"
+                mu_tilde, v_tilde = self.old_mutilde, self.old_vtilde
+                tau_tilde = v_tilde/mu_tilde
+                mu, Sigma, _ = self._ep_compute_posterior(K, tau_tilde, v_tilde)
+                diag.add(Sigma, 1e-7)
+                # TODO: Check the log-marginal under both conditions and choose the best one
+
+            #Approximation
+            tau_diff = self.epsilon + 1.
+            v_diff = self.epsilon + 1.
+            tau_tilde_old = np.nan
+            v_tilde_old = np.nan
+            iterations = 0
+            while ((tau_diff > self.epsilon) or (v_diff > self.epsilon)) and (iterations < self.max_iters):
+                
+                tau_tilde, v_tilde, tau_cav, v_cav = self._update_cavity(self, num_data, tau_cav, v_cav, tau_tilde, v_tilde, mu, Sigma, Y_metadata)
+                
+                #(re) compute Sigma and mu using full Cholesky decompy
+                mu, Sigma, _ = self._ep_compute_posterior(K, tau_tilde, v_tilde)
+
+                #monitor convergence
+                if iterations > 0:
+                    tau_diff = np.mean(np.square(tau_tilde-tau_tilde_old))
+                    v_diff = np.mean(np.square(v_tilde-v_tilde_old))
+                tau_tilde_old = tau_tilde.copy()
+                v_tilde_old = v_tilde.copy()
+
+                iterations += 1
+
+            mu_tilde = v_tilde/tau_tilde
+            mu_cav = v_cav/tau_cav
+            sigma2_sigma2tilde = 1./tau_cav + 1./tau_tilde
+
+            # Z_tilde after removing the terms that can lead to infinite terms due to tau_tilde close to zero.
+            # This terms cancel with the coreresponding terms in the marginal loglikelihood
+            log_Z_tilde = (np.log(Z_hat) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+tau_tilde/tau_cav)
+                            - 0.5 * ((v_tilde)**2 * 1./(tau_cav + tau_tilde)) + 0.5*(v_cav * ( ( (tau_tilde/tau_cav) * v_cav - 2.0 * v_tilde ) * 1./(tau_cav + tau_tilde))))
+                            # - 0.5*np.log(tau_tilde) + 0.5*(v_tilde*v_tilde*1./tau_tilde)
+
+            self.old_mutilde = mu_tilde
+            self.old_vtilde = v_tilde
+
+        return mu, Sigma, mu_tilde, tau_tilde, log_Z_tilde
+
+    def expectation_propagation(self, K, Y_list, likelihood_list, Y_metadata_list)    
 
 class EPDTC(EPBase, VarDTC):
     def inference(self, kern, X, Z, likelihood, Y, mean_function=None, Y_metadata=None, Lm=None, dL_dKmm=None, psi0=None, psi1=None, psi2=None):
