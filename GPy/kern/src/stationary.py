@@ -158,13 +158,23 @@ class Stationary(Kern):
             return self._unscaled_dist(X/self.lengthscale, X2)
         else:
             return self._unscaled_dist(X, X2)/self.lengthscale
-
+    
+    def get_gradients_of_dK_dX(self, X, X2, dimension):
+        pass
+    
+    def get_gradients_of_dK2_dXdX2(self, X, X2, dimension1, dimension2):
+        pass
+    
     def Kdiag(self, X):
         ret = np.empty(X.shape[0])
         ret[:] = self.variance
         return ret
+    
+    def reset_gradients(self):
+        self.variance.gradient = 0.
+        self.lengthscale.gradient = 0.
 
-    def update_gradients_diag(self, dL_dKdiag, X):
+    def update_gradients_diag(self, dL_dKdiag, X, reset=True):
         """
         Given the derivative of the objective with respect to the diagonal of
         the covariance matrix, compute the derivative wrt the parameters of
@@ -172,16 +182,19 @@ class Stationary(Kern):
 
         See also update_gradients_full
         """
-        self.variance.gradient = np.sum(dL_dKdiag)
-        self.lengthscale.gradient = 0.
+        if reset: self.reset_gradients()
+        self.variance.gradient += np.sum(dL_dKdiag)
+        self.lengthscale.gradient += 0.
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
+    def update_gradients_full(self, dL_dK, X, X2=None, reset=True):
         """
         Given the derivative of the objective wrt the covariance matrix
         (dL_dK), compute the gradient wrt the parameters of this kernel,
         and store in the parameters object as e.g. self.variance.gradient
         """
-        self.variance.gradient = np.sum(self.K(X, X2)* dL_dK)/self.variance
+        if reset: self.reset_gradients()
+        
+        self.variance.gradient += np.sum(self.K(X, X2)* dL_dK)/self.variance
 
         #now the lengthscale gradient(s)
         dL_dr = self.dK_dr_via_X(X, X2) * dL_dK
@@ -190,23 +203,27 @@ class Stationary(Kern):
             tmp = dL_dr*self._inv_dist(X, X2)
             if X2 is None: X2 = X
             if config.getboolean('cython', 'working'):
-                self.lengthscale.gradient = self._lengthscale_grads_cython(tmp, X, X2)
+                self.lengthscale.gradient += self._lengthscale_grads_cython(tmp, X, X2)
             else:
-                self.lengthscale.gradient = self._lengthscale_grads_pure(tmp, X, X2)
+                self.lengthscale.gradient += self._lengthscale_grads_pure(tmp, X, X2)
         else:
             r = self._scaled_dist(X, X2)
-            self.lengthscale.gradient = -np.sum(dL_dr*r)/self.lengthscale
+            self.lengthscale.gradient += -np.sum(dL_dr*r)/self.lengthscale
 
 
-    def update_gradients_direct(self, dL_dVar, dL_dLen):
+    def update_gradients_direct(self, gradients, reset=True):
         """
         Specially intended for the Grid regression case.
         Given the computed log likelihood derivates, update the corresponding
         kernel and likelihood gradients.
         Useful for when gradients have been computed a priori.
         """
-        self.variance.gradient = dL_dVar
-        self.lengthscale.gradient = dL_dLen
+        if reset:
+            self.variance.gradient = gradients[0]
+            self.lengthscale.gradient = gradients[1]
+        else:
+            self.variance.gradient += gradients[0]
+            self.lengthscale.gradient += gradients[1]           
 
     def _inv_dist(self, X, X2=None):
         """
