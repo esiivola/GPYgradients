@@ -60,7 +60,9 @@ class GpGrid(GP):
         """
         self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.likelihood, self.Y_normalized, self.Y_metadata)
         self.likelihood.update_gradients(self.grad_dict['dL_dthetaL'])
-        self.kern.update_gradients_direct(self.grad_dict['dL_dVar'], self.grad_dict['dL_dLen'])
+        print(self.grad_dict['dL_dVar'])
+        print(self.grad_dict['dL_dVar'].shape)
+        self.kern.update_gradients_direct([self.grad_dict['dL_dVar'], self.grad_dict['dL_dLen']])
 
     def kron_mmprod(self, A, B):
         count = 0
