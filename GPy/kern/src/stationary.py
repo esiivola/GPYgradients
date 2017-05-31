@@ -3,6 +3,7 @@
 
 
 import numpy as np
+import itertools
 from scipy import integrate
 from .kern import Kern
 from ...core.parameterization import Param
@@ -118,6 +119,197 @@ class Stationary(Kern):
     def dK2_drdr_via_X(self, X, X2):
         #a convenience function, so we can cache dK_dr
         return self.dK2_drdr(self._scaled_dist(X, X2))
+    
+    def dr_dX(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        dist = np.rollaxis(X[:,None,:]-X2[None,:,:],2,0)
+        rinv = self._inv_dist(X,X2)
+        rinv[rinv == 0.] -= self.variance
+        lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+        return rinv[None,:,:]*dist*lengthscale2inv[:,None,None]
+
+    def dr_dX2(self, X, X2):
+        return -self.dr_dX(X, X2)
+
+    def dr_dlengthscale(self, X, X2):
+        rinv = self._inv_dist(X, X2)
+        dist = X[:,None,:]-X2[None,:,:]
+        return -1.0*self._scaled_dist(X, X2)/self.lengthscale if (not self.ARD) else np.rollaxis(-1.0*(rinv[:,:,None]*(dist**2)/(self.lengthscale**3)),2,0)
+
+    def dr2_dXdX2(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        dist = np.rollaxis(X[:,None,:] - X2[None,:,:],2,0)
+        rinv = self._inv_dist(X,X2)
+        rinv3 = rinv**3
+        rinv[rinv == 0.] -= self.variance
+        lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
+        I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        return rinv3[None,None,:,:]*dist[:,None,:,:]*lengthscale2inv[:,None,None,None]*dist[None,:,:,:]*lengthscale2inv[None,:,None,None]-I*rinv[None,None,:,:]*lengthscale2inv[None,:,None,None]
+
+    def dr3_dXdXdX2(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        dist = np.rollaxis(X[:,None,:] - X2[None,:,:], 2,0)
+        rinv =  self._inv_dist(X,X2)
+        rinv3 = rinv**3
+        rinv5 = rinv**5
+        lengthscale2inv = np.ones((X.shape[1]), dtype=np.float64)/(self.lengthscale**2)
+        I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        return (-3.0*rinv5[None,None,None,:,:]*dist[:,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*lengthscale2inv[:,None,None,None,None]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]
+            + I[:,:,None,:,:]*rinv3[None,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*dist[None,None,:,:,:]*lengthscale2inv[None,None,:,None,None]
+            + I[:,None,:,:,:]*rinv3[None,None,None,:,:]*dist[None,:,None,:,:]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]
+            + I[None,:,:,:,:]*rinv3[None,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*dist[:,None,None,:,:]*lengthscale2inv[:,None,None,None,None])
+   
+    def dr3_dlengthscaledXdX2(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        dist = np.rollaxis(X[:,None,:] - X2[None,:,:], 2,0)
+        rinv =  self._inv_dist(X,X2)
+        rinv3 = rinv**3
+        rinv5 = rinv**5
+        dist2 = dist**2
+        lengthscale2inv = 1.0/self.lengthscale**2
+        lengthscale3inv = 1.0/self.lengthscale**3
+        lengthscale4inv = 1.0/self.lengthscale**4
+        lengthscale5inv = 1.0/self.lengthscale**5
+        I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        if not self.ARD:
+            return (-1.0*rinv3[None,None,:,:]*dist[:,None,:,:]*dist[None,:,:,:]*lengthscale5inv
+                +I*rinv[None,None,:,:]*lengthscale3inv)
+        else:
+            return (3.0*rinv5[None,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*dist2[:,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]*lengthscale3inv[:,None,None,None,None]
+                -2.0*I[:,:,None,:,:]*rinv3[None,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*lengthscale3inv[None,:,None,None,None]*lengthscale2inv[None,None,:,None,None]
+                -2.0*I[:,None,:,:,:]*rinv3[None,None,None,:,:]*dist[None,:,None,:,:]*dist[None,None,:,:,:]*lengthscale2inv[None,:,None,None,None]*lengthscale3inv[None,None,:,None,None]
+                -1.0*I[None,:,:,:,:]*rinv3[None,None,None,:,:]*lengthscale2inv[None,:,None,None,None]*dist2[:,None,None,:,:]*lengthscale3inv[:,None,None,None,None]
+                +2.0*I[:,:,None,:,:]*I[:,None,:,:,:]*rinv[None,None,None,:,:]*lengthscale3inv[None,:,None,None,None])
+   
+    def dr3_dX2dXdX2(self, X, X2):
+        return -1.0*self.dr3_dXdXdX2(X,X2)    
+
+    @Cache_this(limit=3, ignore_args=())
+    def dK_dX(self, X, X2):
+        """
+        compute the partial derivative of K wrt X in all dimensions
+        If X is [NxD], X2 is [MxD], returned matrix is [NxMxD]
+        """
+        dK = np.zeros([X.shape[0], X2.shape[0], self.input_dim], dtype=np.float64)
+        inv_dist = self._inv_dist(X, X2)
+        dK_dr = self.dK_dr_via_X(X, X2)
+        dr_dx = self.dr_dX(X, X2)
+        return dK_dr[None,:,:]*dr_dx
+
+    def dK_dX2(self, X, X2):
+        return -1.0*self.dK_dX(X, X2)
+
+    @Cache_this(limit=3, ignore_args=())
+    def dK2_dXdX2(self, X, X2):
+        """
+        Compute the partial derivatives of K wrt X and X2 in all dimensions
+        For X [NxD], X2 [MxD], returned matrix is [NxMxDXD]
+        This function is basically a wrapper for gradients_XX-function, but it changes
+        order of axes.
+        """
+        return self.gradients_XX(np.ones([X.shape[0], X2.shape[0]]), X, X2).swapaxes(0,2).swapaxes(1,3)
+    
+    def dK2_dvariancedX(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        dk2_dvariancedr = self.dK2_dvariancedr(r)
+        dr_dx = self.dr_dX(X, X2)
+        return dk2_dvariancedr*dr_dx
+    
+    def dK2_dvariancedX2(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        dk2_dvariancedr = self.dK2_dvariancedr(r)
+        dr_dx2 = self.dr_dX2(X, X2)
+        return dk2_dvariancedr*dr_dx2
+    
+    def dK2_dlengthscaledX(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        dr_dx = self.dr_dX(X, X2)
+        dk_dr = self.dK_dr_via_X(X, X2)
+        dk2_drdr = self.dK2_drdr(r)
+        dr_dlengthscale = self.dr_dlengthscale(X, X2)
+        dr2_dlengthscaledx = self.dr2_dlengthscaledX(X, X2)
+        return (dk2_drdr[None,None,:,:]*dr_dx[None,:,:,:]*dr_dlengthscale[:,None,:,:] + dk_dr*dr2_dlengthscaledx) if self.ARD else (dk2_drdr*dr_dx*dr_dlengthscale[None,:,:] + dk_dr*dr2_dlengthscaledx)
+
+    def dK2_dlengthscaledX2(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        dr_dx2 = self.dr_dX2(X, X2)
+        dk_dr = self.dK_dr_via_X(X, X2)
+        dk2_drdr = self.dK2_drdr(r)
+        dr_dlengthscale = self.dr_dlengthscale(X, X2)
+        dr2_dlengthscaledx2 = self.dr2_dlengthscaledX2(X, X2)
+        return (dk2_drdr[None,None,:,:]*dr_dx2[None,:,:,:]*dr_dlengthscale[:,None,:,:] + dk_dr*dr2_dlengthscaledx2) if self.ARD else (dk2_drdr*dr_dx2*dr_dlengthscale[None,:,:] + dk_dr*dr2_dlengthscaledx2)
+
+    def dK3_dvariancedXdX2(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        dk2_dvariancedr = self.dK2_dvariancedr(r)
+        dr_dx = self.dr_dX(X, X2)
+        dr_dx2 = self.dr_dX2(X,X2)
+        dr2_dxdx2 = self.dr2_dXdX2(X, X2)
+        dk3_dvariancedrdr = self.dK3_dvariancedrdr(r)
+        dk2_dvariancedr = self.dK2_dvariancedr(r)
+        tmp = dk2_dvariancedr[None,None,:,:]*dr2_dxdx2[:,:,:,:]
+        tmp[:,:,(self._inv_dist(X, X2)) == 0.] += dr2_dxdx2[:,:,(self._inv_dist(X, X2)) == 0.]/self.variance
+        return tmp + dk3_dvariancedrdr[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:]
+
+    def dK3_dlengthscaledXdX2(self, X, X2):
+        r = self._scaled_dist(X, X2)
+        invd = self._inv_dist(X, X2)
+        K = self.K_of_r(r)
+        dk_dr = self.dK_dr(r)
+        dk2_drdr = self.dK2_drdr(r)
+        dk3_drdrdr = self.dK3_drdrdr(r)
+        dr_dx = self.dr_dX(X,X2)
+        dr_dx2 = self.dr_dX2(X,X2)
+        dr2_dxdx2 = self.dr2_dXdX2(X,X2)
+        dr_dlengthscale = self.dr_dlengthscale(X, X2)
+        dr2_dlengthscaledx = self.dr2_dlengthscaledX(X, X2)
+        dr2_dlengthscaledx2 = self.dr2_dlengthscaledX2(X, X2)
+        dr3_dlengthscaledxdx2 = self.dr3_dlengthscaledXdX2(X, X2)
+        I = (np.ones((X.shape[0], X.shape[0], X.shape[1], X.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        if not self.ARD:
+            g = (dk2_drdr[None,None,:,:]*dr_dlengthscale[None,None,:,:]*dr2_dxdx2 + dk_dr[None,None,:,:]*dr3_dlengthscaledxdx2
+                +dk3_drdrdr[None,None,:,:]*dr_dlengthscale[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:] 
+                +dk2_drdr[None,None,:,:]*dr2_dlengthscaledx[:,None,:,:]*dr_dx2[None,:,:,:]
+                +dk2_drdr[None,None,:,:]*dr_dx[:,None,:,:]*dr2_dlengthscaledx2[None,:,:,:])
+            g[:,:,(invd == 0.)] = (-2.0*I[:,:,:,:]*K[None,None,:,:]/(self.lengthscale**3))[:,:,( invd == 0.)]
+        else:
+            g = (dk2_drdr[None,None,None,:,:]*dr_dlengthscale[:,None,None,:,:]*dr2_dxdx2[None,:,:,:,:] + dk_dr[None,None,None,:,:]*dr3_dlengthscaledxdx2
+                +dk3_drdrdr[None,None,None,:,:]*dr_dlengthscale[:,None,None,:,:]*dr_dx[None,:,None,:,:]*dr_dx2[None,None,:,:,:]
+                +dk2_drdr[None,None,None,:,:]*dr2_dlengthscaledx[:,:,None,:,:]*dr_dx2[None,None,:,:,:]
+                +dk2_drdr[None,None,None,:,:]*dr_dx[None,:,None,:,:]*dr2_dlengthscaledx2[:,None,:,:,:])
+            g[:,:,:,(invd == 0.)] = (-2.0*I[:,:,None,:,:]*I[:,None,:,:,:]*K[None,None,None,:,:]/(self.lengthscale[:,None,None,None,None]**3))[:,:,:,(invd == 0.)]
+        return g
+
+    def dgradients_dX(self, X, X2):
+        g1 = [self.dK2_dvariancedX(X, X2)]
+        g2 = self.dK2_dlengthscaledX(X, X2)
+        if not self.ARD:
+            g2 = [g2]
+        else:
+            g2 = [g2[i,:,:,:] for i in xrange(0,self.input_dim)]
+        return list(itertools.chain(*[g1, g2]))
+
+    def dgradients_dX2(self, X, X2):
+        g1 = [self.dK2_dvariancedX2(X, X2)]
+        g2 = self.dK2_dlengthscaledX2(X, X2)
+        if not self.ARD:
+            g2 = [g2]
+        else:
+            g2 = [g2[i,:,:,:] for i in xrange(0,self.input_dim)]
+        return list(itertools.chain(*[g1, g2]))
+
+    def dgradients2_dXdX2(self, X, X2):
+        g1 = self.dK3_dvariancedXdX2(X, X2)
+        g2 = self.dK3_dlengthscaledXdX2(X, X2)
+        if not self.ARD:
+            g2 = [g2]
+        else:
+            g2 = [g2[i,:,:,:,:] for i in xrange(0,self.input_dim)]
+        return list(itertools.chain(*[g1, g2]))
 
     def _unscaled_dist(self, X, X2=None):
         """
@@ -159,12 +351,6 @@ class Stationary(Kern):
         else:
             return self._unscaled_dist(X, X2)/self.lengthscale
     
-    def get_gradients_of_dK_dX(self, X, X2, dimension):
-        pass
-    
-    def get_gradients_of_dK2_dXdX2(self, X, X2, dimension1, dimension2):
-        pass
-    
     def Kdiag(self, X):
         ret = np.empty(X.shape[0])
         ret[:] = self.variance
@@ -172,7 +358,10 @@ class Stationary(Kern):
     
     def reset_gradients(self):
         self.variance.gradient = 0.
-        self.lengthscale.gradient = 0.
+        if not self.ARD:
+            self.lengthscale.gradient = 0.
+        else:
+            self.lengthscale.gradient = np.zeros(self.input_dim)
 
     def update_gradients_diag(self, dL_dKdiag, X, reset=True):
         """
@@ -184,7 +373,10 @@ class Stationary(Kern):
         """
         if reset: self.reset_gradients()
         self.variance.gradient += np.sum(dL_dKdiag)
-        self.lengthscale.gradient += 0.
+        if not self.ARD:
+            self.lengthscale.gradient += 0.
+        else:
+            self.lengthscale.gradient += np.zeros(self.input_dim)
 
     def update_gradients_full(self, dL_dK, X, X2=None, reset=True):
         """
@@ -220,10 +412,10 @@ class Stationary(Kern):
         """
         if reset:
             self.variance.gradient = gradients[0]
-            self.lengthscale.gradient = gradients[1]
+            self.lengthscale.gradient = np.array(gradients[1:])
         else:
             self.variance.gradient += gradients[0]
-            self.lengthscale.gradient += gradients[1]           
+            self.lengthscale.gradient += np.array(gradients[1:])
 
     def _inv_dist(self, X, X2=None):
         """
@@ -354,9 +546,6 @@ class Stationary(Kern):
         reconstructing the full covariance matrix.
         """
         raise NotImplementedError("implement one dimensional variation of kernel")
-
-
-
 
 class Exponential(Stationary):
     def __init__(self, input_dim, variance=1., lengthscale=None, ARD=False, active_dims=None, name='Exponential'):

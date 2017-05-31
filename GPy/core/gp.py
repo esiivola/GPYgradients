@@ -38,7 +38,7 @@ class GP(Model):
     def __init__(self, X, Y, kernel, likelihood, mean_function=None, inference_method=None, name='gp', Y_metadata=None, normalizer=False):
         super(GP, self).__init__(name)
 
-        assert X.ndim == 2
+        #assert X.ndim == 2
         if isinstance(X, (ObsAr, VariationalPosterior)):
             self.X = X.copy()
         else: self.X = ObsAr(X)

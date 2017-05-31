@@ -181,6 +181,13 @@ class Posterior(object):
         return self._woodbury_vector
 
     @property
+    def K(self):
+        """
+        The prior covariance K
+        """
+        return self._K
+
+    @property
     def K_chol(self):
         """
         Cholesky of the prior covariance K
@@ -305,3 +312,17 @@ class PosteriorEP(Posterior):
             var = var
 
         return mu, var
+    
+class MultioutputPosteriorEP(PosteriorEP):
+    
+    def _raw_predict(self, kern, Xnew, pred_var, full_cov=False): # doesn't work with multidim chol
+        mu, var = super(MultioutputPosteriorEP, self)._raw_predict(kern, Xnew, pred_var, full_cov)
+        #put it to a list so that we can distinguish the means of different likelihoods
+        nl = len(Xnew)
+        ind = [0]*(nl+1)
+        for i in xrange(1, nl+1):
+            ind[i] = ind[i-1] + Xnew[i-1].shape[0]
+        mu_list = [ mu[ind[i]:ind[i+1]] for i in xrange(0,nl)]
+        var_list = [var[ind[i]:ind[i+1],:] for i in xrange(0,nl)]
+        return mu_list, var_list
+        

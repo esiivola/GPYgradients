@@ -1,11 +1,13 @@
 # Copyright (c) 2012-2014, GPy authors (see AUTHORS.txt).
 # Licensed under the BSD 3-clause license (see LICENSE.txt)
 import numpy as np
+import itertools
 from ...util.linalg import jitchol, DSYR, dtrtrs, dtrtri, pdinv, dpotrs, tdot, symmetrify
 from paramz import ObsAr
 from . import ExactGaussianInference, VarDTC
 from ...util import diag
 from .posterior import PosteriorEP as Posterior
+from .posterior import MultioutputPosteriorEP as MultioutputPosterior
 
 log_2_pi = np.log(2*np.pi)
 
@@ -105,31 +107,35 @@ class EP(EPBase, ExactGaussianInference):
             self._update_cavity_params(num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata)
 
             #(re) compute Sigma and mu using full Cholesky decompy
-            post_params = self._ep_compute_posterior(K, ga_approx.tau_tilde, ga_approx.v_tilde)
+            post_params = self._ep_compute_posterior(K, ga_approx.tau, ga_approx.v)
 
             #monitor convergence
             if iterations > 0:
-                tau_diff = np.mean(np.square(ga_approx.tau_tilde-self.ga_approx_old.tau_tilde))
-                v_diff = np.mean(np.square(ga_approx.v_tilde-ga_approx.v_tilde))
-            self.ga_approx_old = gaussianApproximation(ga_approx.mu_tilde.copy(), ga_approx.v_tilde.copy(), ga_approx.tau_tilde.copy())
+                tau_diff = np.mean(np.square(ga_approx.tau-self.ga_approx_old.tau))
+                v_diff = np.mean(np.square(ga_approx.v-self.ga_approx_old.v))
+            self.ga_approx_old = gaussianApproximation(ga_approx.mu.copy(), ga_approx.v.copy(), ga_approx.tau.copy())
             iterations += 1
 
-        ga_approx.mu_tilde = ga_approx.v_tilde/ga_approx.tau_tilde
+        ga_approx.mu = ga_approx.v/ga_approx.tau
 
         # Z_tilde after removing the terms that can lead to infinite terms due to tau_tilde close to zero.
         # This terms cancel with the coreresponding terms in the marginal loglikelihood
-        log_Z_tilde = (np.log(marg_moments.Z_hat) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau_tilde/cav_params.tau_cav)
-                         - 0.5 * ((ga_approx.v_tilde)**2 * 1./(cav_params.tau_cav + ga_approx.tau_tilde)) + 0.5*(cav_params.v_cav * ( ( (ga_approx.tau_tilde/cav_params.tau_cav) * cav_params.v_cav - 2.0 * ga_approx.v_tilde ) * 1./(cav_params.tau_cav + ga_approx.tau_tilde))))
+        log_Z_tilde = self._log_Z_tilde(marg_moments, ga_approx, cav_params)
                          # - 0.5*np.log(tau_tilde) + 0.5*(v_tilde*v_tilde*1./tau_tilde)
 
-        return post_params.mu, post_params.Sigma, ga_approx.mu_tilde, ga_approx.tau_tilde, log_Z_tilde
+        return post_params.mu, post_params.Sigma, ga_approx.mu, ga_approx.tau, log_Z_tilde
     
-    def _update_cavity_params(self, num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata):
-            update_order = np.random.permutation(num_data)
+    def _log_Z_tilde(self, marg_moments, ga_approx, cav_params):
+        return (np.log(marg_moments.Z_hat) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau/cav_params.tau) - 0.5 * ((ga_approx.v)**2 * 1./(cav_params.tau + ga_approx.tau)) 
+                + 0.5*(cav_params.v * ( ( (ga_approx.tau/cav_params.tau) * cav_params.v - 2.0 * ga_approx.v ) * 1./(cav_params.tau + ga_approx.tau))))
+    
+    def _update_cavity_params(self, num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata, update_order=None):
+            if update_order is None:
+                update_order = np.random.permutation(num_data)
             for i in update_order:
                 #Cavity distribution parameters
-                cav_params.tau_cav[i] = 1./post_params.Sigma[i,i] - self.eta*ga_approx.tau_tilde[i]
-                cav_params.v_cav[i] = post_params.mu[i]/post_params.Sigma[i,i] - self.eta*ga_approx.v_tilde[i]
+                cav_params.tau[i] = 1./post_params.Sigma[i,i] - self.eta*ga_approx.tau[i]
+                cav_params.v[i] = post_params.mu[i]/post_params.Sigma[i,i] - self.eta*ga_approx.v[i]
                 if Y_metadata is not None:
                     # Pick out the relavent metadata for Yi
                     Y_metadata_i = {}
@@ -138,27 +144,27 @@ class EP(EPBase, ExactGaussianInference):
                 else:
                     Y_metadata_i = None
                 #Marginal moments
-                marg_moments.Z_hat[i], marg_moments.mu_hat[i], marg_moments.sigma2_hat[i] = likelihood.moments_match_ep(Y[i], cav_params.tau_cav[i], cav_params.v_cav[i], Y_metadata_i=Y_metadata_i)
+                marg_moments.Z_hat[i], marg_moments.mu_hat[i], marg_moments.sigma2_hat[i] = likelihood.moments_match_ep(Y[i], cav_params.tau[i], cav_params.v[i], Y_metadata_i=Y_metadata_i)
                 
                 #Site parameters update
                 delta_tau = self.delta/self.eta*(1./marg_moments.sigma2_hat[i] - 1./post_params.Sigma[i,i])
                 delta_v = self.delta/self.eta*(marg_moments.mu_hat[i]/marg_moments.sigma2_hat[i] - post_params.mu[i]/post_params.Sigma[i,i])
-                tau_tilde_prev = ga_approx.tau_tilde[i]
-                ga_approx.tau_tilde[i] += delta_tau
+                tau_tilde_prev = ga_approx.tau[i]
+                ga_approx.tau[i] += delta_tau
 
                 # Enforce positivity of tau_tilde. Even though this is guaranteed for logconcave sites, it is still possible
                 # to get negative values due to numerical errors. Moreover, the value of tau_tilde should be positive in order to
                 # update the marginal likelihood without inestability issues.
-                if ga_approx.tau_tilde[i] < np.finfo(float).eps:
-                    ga_approx.tau_tilde[i] = np.finfo(float).eps
-                    delta_tau = ga_approx.tau_tilde[i] - tau_tilde_prev
-                ga_approx.v_tilde[i] += delta_v
+                if ga_approx.tau[i] < np.finfo(float).eps:
+                    ga_approx.tau[i] = np.finfo(float).eps
+                    delta_tau = ga_approx.tau[i] - tau_tilde_prev
+                ga_approx.v[i] += delta_v
 
                 if self.parallel_updates == False:
                     #Posterior distribution parameters update
                     ci = delta_tau/(1.+ delta_tau*post_params.Sigma[i,i])
                     DSYR(post_params.Sigma, post_params.Sigma[:,i].copy(), -ci)
-                    post_params.mu = np.dot(post_params.Sigma, ga_approx.v_tilde)
+                    post_params.mu = np.dot(post_params.Sigma, ga_approx.v)
                     
     def _init_approximations(self, K, num_data):
         #initial values - Gaussian factors
@@ -171,9 +177,9 @@ class EP(EPBase, ExactGaussianInference):
             mu = np.zeros(num_data)
             post_params = posteriorParams(mu, Sigma)
         else:
-            assert self.ga_approx_old.mu_tilde.size == num_data, "data size mis-match: did you change the data? try resetting!"
-            ga_approx = gaussianApproximation(self.ga_approx_old.mu_tilde, self.ga_approx_old.v_tilde)
-            post_params = self._ep_compute_posterior(K, ga_approx.tau_tilde, ga_approx.v_tilde)
+            assert self.ga_approx_old.mu.size == num_data, "data size mis-match: did you change the data? try resetting!"
+            ga_approx = gaussianApproximation(self.ga_approx_old.mu, self.ga_approx_old.v)
+            post_params = self._ep_compute_posterior(K, ga_approx.tau, ga_approx.v)
             diag.add(post_params.Sigma, 1e-7)
             # TODO: Check the log-marginal under both conditions and choose the best one
         return (ga_approx, post_params)
@@ -217,167 +223,216 @@ class EP(EPBase, ExactGaussianInference):
 
         return Posterior(woodbury_inv=Wi, woodbury_vector=alpha, K=K), log_marginal, {'dL_dK':dL_dK, 'dL_dthetaL':dL_dthetaL, 'dL_dm':alpha}
 
-class fixedEP(EP):
-    def inference(self, kern, X, likelihood, Y, mean_function, Y_metadata, precision=None, K=None, fixed_index=None, fixed=None):
+class FixedEP(EP):
+    def inference(self, kern, X, likelihood, Y, fixed_index, fixed_gaussian_v, fixed_gaussian_tau, mean_function, Y_metadata, precision=None, K=None):
         self.fixed_index = fixed_index
-        return super(fixedEP, self).inference(kern, X, likelihood, Y, mean_function, Y_metadata, precision=None, K=None)
+        self.fixed_gaussian_v = fixed_gaussian_v 
+        self.fixed_gaussian_tau = fixed_gaussian_tau
+        return super(FixedEP, self).inference(kern, X_list, likelihood, Y, mean_function, Y_metadata, precision=None, K=None)
 
-    def expectation_propagation(self, K, Y, likelihood, Y_metadata, fixed_index=None):
-        if fixed_index is None:
-            fixed_index = self.fixed_index
- ###CONTINUE FROM HERE!!       
-
-
-        return 1 #mu, Sigma, mu_tilde, tau_tilde, log_Z_tilde
+    def _update_cavity_params(self, num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata, update_order=None):
+        update_order = np.ones(num_data, np.bool)
+        update_order[self.fixed_index] = 0
+        super(FixedEP, self)._update_cavity_params(num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata, np.random.permutation(update_order))
+        for i in self.fixed_index:
+                self.ga_approx.v[i] = self.fixed_gaussian_v[i]
+                self.ga_approx_tau[i] = self.fixed_gaussian_tau[i]
+      
+    def _log_Z_tilde(self, marg_moments, ga_approx, cav_params):
+        num_data = ga_approx.tau.shape[0]
+        tmp = np.zeros(num_data,dtype=np.float64)
+        for i in xrange(0, num_data ):
+            if self.fixed_index[i] < 1:
+                tmp[i] = (np.log(marg_moments.Z_hat[i]) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau[i]/cav_params.tau[i]) - 0.5 * ((ga_approx.v[i])**2 * 1./(cav_params.tau[i] + ga_approx.tau[i])) 
+                        + 0.5*(cav_params.v[i] * ( ( (ga_approx.tau[i]/cav_params.tau[i]) * cav_params.v[i] - 2.0 * ga_approx.v[i] ) * 1./(cav_params.tau[i] + ga_approx.tau[i]))))
+        return tmp
     
-class multioutputEP(EP):
-    def inference(self, kern, X_list, combined_likelihood, Y_list, mean_function_list=None, Y_metadata_list=None, precision=None, K=None):   
-        if self.always_reset:
-            self.reset()
-
-        if K is None:
-            K = kern.K(X_list)
-
-        if self.ep_mode=="nested":
-            #Force EP at each step of the optimization
-            self._ep_approximation = None
-            mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list = self._ep_approximation = self.expectation_propagation(K, Y_list, combined_likelihood, Y_metadata_list)
-        elif self.ep_mode=="alternated":
-            if getattr(self, '_ep_approximation', None) is None:
-                #if we don't yet have the results of runnign EP, run EP and store the computed factors in self._ep_approximation
-                mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list = self._ep_approximation = self.expectation_propagation(K, Y_list, combined_likelihood, Y_metadata_list)
+class MultioutputEP(FixedEP):
+    def inference(self, kern, X_list, likelihood, Y_list, mean_function_list=None, Y_metadata_list=None, precision=None, K=None):
+        fixed_index, fixed_gaussian_v, fixed_gaussian_tau = likelihood.get_fixed_gaussian(X_list)
+        Y_metadata = self._merge_metadata(X_list, Y_metadata_list)
+        likelihood_index = None
+        for i in xrange(0, len(X_list)):
+            if likelihood_index is None:
+                likelihood_index = i*np.ones(X_list[i].shape[0])
             else:
-                #if we've already run EP, just use the existing approximation stored in self._ep_approximation
-                mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list = self._ep_approximation
-        else:
-            raise ValueError("ep_mode value not valid")
+                likelihood_index.append(i*np.ones(X_list[i].shape[0]))
+        Y_metadata["likelihood"] = likelihood_index
+        return super(MultioutputEP, self).inference(kern, X, likelihood, np.array(list(itertools.chain(*Y))), fixed_index, fixed_gaussian_v,fixed_gaussian_tau, mean_function, Y_metadata, precision=None, K=None)
+    
+    def _inference(self, K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata=None):
+        posterior, log_marginal, dL = super(multioutputEP, self)._inference(K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata)
+        return MultioutputPosterior(woodbury_inv=posterior.woodbury_inv(), woodbury_vector=posterior.woodbury_vector(), K=posterior.K()), log_marginal, {'dL_dK':dL_dK, 'dL_dthetaL':dL_dthetaL, 'dL_dm':alpha}
+    
+    def _merge_metadata(X_list, Y_metadata_list):
+        if Y_metadata_list is None:
+            return {}
+        key_list = []
+        for metadata in Y_metadata_list:
+            new_keys = list(metadata.keys())
+            for key in new_keys:
+                key_list.append(key)
+                
+        key_list = List(Set(key_list))
+        Y_metadata
+        for key in key_list:
+            value = None
+            for md_temp in Y_metadata_list:
+                tmp = md_temp.get(key)
+                if tmp is not None:
+                    value.append(tmp, axis=0)
+            Y_metadata[key] =  value
+        return Y_metadata
+        
+        
+#class multioutputEP(EP):
+    #def inference(self, kern, X_list, combined_likelihood, Y_list, mean_function_list=None, Y_metadata_list=None, precision=None, K=None):   
+        #if self.always_reset:
+            #self.reset()
 
-        v_tilde_list = [m * t for m,t in zip(mu_tilde, tau_tilde)]
-        return self._inference(K, np.concatenate(tau_tilde_list, axis=0), np.concatenate(v_tilde_list, axis=0), combined_likelihood, Y_metadata=Y_metadata_list,  Z_tilde=sum([log_Z_tilde_list[i].sum() for i in xrange(0, len(log_Z_tilde_list))]))
+        #if K is None:
+            #K = kern.K(X_list)
 
-    def expectation_propagation(self, K, Y_list, combined_likelihood, Y_metadata_list):
-        likelihood_list = combined_likelihood.likelihoods
-        nl = len(likelihood_list)
-        num_data_list = [None]*nl 
-        y_list = [None]*nl
-        k_list = [None]*nl
-        Z_hat_list = [None]*nl
-        mu_hat_list = [None]*nl
-        sigma2_hat_list = [None]*nl
-        
-        tau_cav_list = [None]*nl
-        v_cav_list = [None]*nl
-        
-        mu_list = [None]*nl
-        Sigma_list = [[None]*nl]*nl
-        
-        tau_tilde_list = [None]*nl
-        mu_tilde_list = [None]*nl
-        v_tilde_list = [None]*nl
-        
-        ind_list = [0]*(nl+1)
-        
-        log_Z_tilde_list = [None]*nl
-        
-        for i in xrange(0,nl):
-            num_data_list[i] = Y_list[i].shape[0]
+        #if self.ep_mode=="nested":
+            ##Force EP at each step of the optimization
+            #self._ep_approximation = None
+            #mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list = self._ep_approximation = self.expectation_propagation(K, Y_list, combined_likelihood, Y_metadata_list)
+        #elif self.ep_mode=="alternated":
+            #if getattr(self, '_ep_approximation', None) is None:
+                ##if we don't yet have the results of runnign EP, run EP and store the computed factors in self._ep_approximation
+                #mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list = self._ep_approximation = self.expectation_propagation(K, Y_list, combined_likelihood, Y_metadata_list)
+            #else:
+                ##if we've already run EP, just use the existing approximation stored in self._ep_approximation
+                #mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list = self._ep_approximation
+        #else:
+            #raise ValueError("ep_mode value not valid")
 
-            # Makes computing the sign quicker if we work with numpy arrays rather
-            # than ObsArrays
-            y_list[i] = Y_list[i].values.copy()
+        #v_tilde_list = [m * t for m,t in zip(mu_tilde, tau_tilde)]
+        #return self._inference(K, np.concatenate(tau_tilde_list, axis=0), np.concatenate(v_tilde_list, axis=0), combined_likelihood, Y_metadata=Y_metadata_list,  Z_tilde=sum([log_Z_tilde_list[i].sum() for i in xrange(0, len(log_Z_tilde_list))]))
 
-            #Initial values - Marginal moments
-            Z_hat_list[i] = np.empty(num_data_list[i],dtype=np.float64)
-            mu_hat_list[i] = np.empty(num_data_list[i],dtype=np.float64)
-            sigma2_hat_list[i] = np.empty(num_data_list[i],dtype=np.float64)
+    #def expectation_propagation(self, K, Y_list, combined_likelihood, Y_metadata_list):
+        #likelihood_list = combined_likelihood.likelihoods
+        #nl = len(likelihood_list)
+        #num_data_list = [None]*nl 
+        #y_list = [None]*nl
+        #k_list = [None]*nl
+        #Z_hat_list = [None]*nl
+        #mu_hat_list = [None]*nl
+        #sigma2_hat_list = [None]*nl
+        
+        #tau_list = [None]*nl
+        #v_list = [None]*nl
+        
+        #mu_list = [None]*nl
+        #Sigma_list = [[None]*nl]*nl
+        
+        #tau_tilde_list = [None]*nl
+        #mu_tilde_list = [None]*nl
+        #v_tilde_list = [None]*nl
+        
+        #ind_list = [0]*(nl+1)
+        
+        #log_Z_tilde_list = [None]*nl
+        
+        #for i in xrange(0,nl):
+            #num_data_list[i] = Y_list[i].shape[0]
 
-            tau_cav_list[i] = np.empty(num_data_list[i],dtype=np.float64)
-            v_cav_list[i] = np.empty(num_data_list[i],dtype=np.float64)
+            ## Makes computing the sign quicker if we work with numpy arrays rather
+            ## than ObsArrays
+            #y_list[i] = Y_list[i].values.copy()
+
+            ##Initial values - Marginal moments
+            #Z_hat_list[i] = np.empty(num_data_list[i],dtype=np.float64)
+            #mu_hat_list[i] = np.empty(num_data_list[i],dtype=np.float64)
+            #sigma2_hat_list[i] = np.empty(num_data_list[i],dtype=np.float64)
+
+            #tau_list[i] = np.empty(num_data_list[i],dtype=np.float64)
+            #v_list[i] = np.empty(num_data_list[i],dtype=np.float64)
         
-            ind_list[i+1] = ind_list[i]+num_data_list[i]
+            #ind_list[i+1] = ind_list[i]+num_data_list[i]
         
-        #initial values - Gaussian factors
-        #Initial values - Posterior distribution parameters: q(f|X,Y) = N(f|mu,Sigma)
-        if self.old_mutilde is None:
-            for i in xrange(0,nl):
-                tau_tilde_list[i], mu_tilde_list[i], v_tilde_list[i] = np.zeros((3, num_data_list[i]))
-                Sigma_list[i] = [K[ind_list[i]:ind_list[i+1],ind_list[j]:ind_list[j+1]].copy() for j in xrange(0,nl)]
-                Sigma_list[i][i] = diag.add(Sigma_list[i][i], 1e-7)
-                mu_list[i] = np.zeros(num_data_list[i])
-                if likelihood_list[i].name is 'Gaussian_noise':
-                    tau_tilde_list[i] = np.ones(num_data_list[i], dtype=np.float64)*1./likelihood_list[i].variance
-                    v_tilde_list[i] = np.ones(num_data_list[i], dtype=np.float64)*1./likelihood_list[i].variance
-                    
-        else:
-            for i in xrange(0, nl): 
-                assert self.old_mutilde[i].size == num_data_list[i], "data size mis-match: did you change the data? try resetting!"
-            mu_tilde_list = self.old_mutilde
-            v_tilde_list = self.old_vtilde
-            tau_tilde_list = [v_tilde_list[i]/mu_tilde_list[i] for i in xrange(0, nl)]
-            mu_list, Sigma_list, _ = self._ep_compute_posterior_for_all(K, tau_tilde_list, v_tilde_list, ind_list)
-            for i in xrange(0, nl):
-                Sigma_list[i,i] = diag.add(Sigma_list[i,i], 1e-7)
-            # TODO: Check the log-marginal under both conditions and choose the best one
-        
-        
-        #Approximation
-        tau_diff = self.epsilon + 1.
-        v_diff = self.epsilon + 1.
-        tau_tilde_old = np.nan
-        v_tilde_old = np.nan
-        iterations = 0
-        while ((tau_diff > self.epsilon) or (v_diff > self.epsilon)) and (iterations < self.max_iters):
-            for i in xrange(0,nl):
-                if likelihood_list[i].name is not 'Gaussian_noise':
-                    tau_cav_list[i], v_cav_list[i], tau_tilde_list[i], v_tilde_list[i], mu_list[i], Sigma_list[i][i], Z_hat_list[i], mu_hat_list[i], sigma2_hat_list[i] = self._update_cavity( likelihood_list[i], nl_list[i], tau_cav_list[i], v_cav_list[i], tau_tilde_list[i], v_tilde_list[i], mu_list[i], Sigma_list[i][i], Y_metadata[i], Z_hat_list[i], mu_hat_list[i], sigma2_hat_list[i])
-                #else: ##These should not change at all!
+        ##initial values - Gaussian factors
+        ##Initial values - Posterior distribution parameters: q(f|X,Y) = N(f|mu,Sigma)
+        #if self.old_mutilde is None:
+            #for i in xrange(0,nl):
+                #tau_tilde_list[i], mu_tilde_list[i], v_tilde_list[i] = np.zeros((3, num_data_list[i]))
+                #Sigma_list[i] = [K[ind_list[i]:ind_list[i+1],ind_list[j]:ind_list[j+1]].copy() for j in xrange(0,nl)]
+                #Sigma_list[i][i] = diag.add(Sigma_list[i][i], 1e-7)
+                #mu_list[i] = np.zeros(num_data_list[i])
+                #if likelihood_list[i].name is 'Gaussian_noise':
                     #tau_tilde_list[i] = np.ones(num_data_list[i], dtype=np.float64)*1./likelihood_list[i].variance
                     #v_tilde_list[i] = np.ones(num_data_list[i], dtype=np.float64)*1./likelihood_list[i].variance
+                    
+        #else:
+            #for i in xrange(0, nl): 
+                #assert self.old_mutilde[i].size == num_data_list[i], "data size mis-match: did you change the data? try resetting!"
+            #mu_tilde_list = self.old_mutilde
+            #v_tilde_list = self.old_vtilde
+            #tau_tilde_list = [v_tilde_list[i]/mu_tilde_list[i] for i in xrange(0, nl)]
+            #mu_list, Sigma_list, _ = self._ep_compute_posterior_for_all(K, tau_tilde_list, v_tilde_list, ind_list)
+            #for i in xrange(0, nl):
+                #Sigma_list[i,i] = diag.add(Sigma_list[i,i], 1e-7)
+            ## TODO: Check the log-marginal under both conditions and choose the best one
+        
+        
+        ##Approximation
+        #tau_diff = self.epsilon + 1.
+        #v_diff = self.epsilon + 1.
+        #tau_tilde_old = np.nan
+        #v_tilde_old = np.nan
+        #iterations = 0
+        #while ((tau_diff > self.epsilon) or (v_diff > self.epsilon)) and (iterations < self.max_iters):
+            #for i in xrange(0,nl):
+                #if likelihood_list[i].name is not 'Gaussian_noise':
+                    #tau_list[i], v_list[i], tau_tilde_list[i], v_tilde_list[i], mu_list[i], Sigma_list[i][i], Z_hat_list[i], mu_hat_list[i], sigma2_hat_list[i] = self._update_cavity( likelihood_list[i], nl_list[i], tau_list[i], v_list[i], tau_tilde_list[i], v_tilde_list[i], mu_list[i], Sigma_list[i][i], Y_metadata[i], Z_hat_list[i], mu_hat_list[i], sigma2_hat_list[i])
+                ##else: ##These should not change at all!
+                    ##tau_tilde_list[i] = np.ones(num_data_list[i], dtype=np.float64)*1./likelihood_list[i].variance
+                    ##v_tilde_list[i] = np.ones(num_data_list[i], dtype=np.float64)*1./likelihood_list[i].variance
             
-            #(re) compute Sigma and mu using full Cholesky decompy
-            mu_list, Sigma_list, _ = self. self._ep_compute_posterior_for_all(K, tau_tilde_list, v_tilde_list, ind_list)
+            ##(re) compute Sigma and mu using full Cholesky decompy
+            #mu_list, Sigma_list, _ = self. self._ep_compute_posterior_for_all(K, tau_tilde_list, v_tilde_list, ind_list)
 
-            #monitor convergence
-            if iterations > 0:
-                tau_diff = np.mean([ np.mean(np.square(tau_tilde_list[i]-tau_tilde_old_list[i])) for i in xrange(0,nl)])
-                v_diff = np.mean([ np.mean(np.square(v_tilde_list[i]-v_tilde_old_list[i])) for i in xrange(0,nl)])
-            tau_tilde_old_list = tau_tilde_list.copy()
-            v_tilde_old_list = v_tilde_list.copy()
+            ##monitor convergence
+            #if iterations > 0:
+                #tau_diff = np.mean([ np.mean(np.square(tau_tilde_list[i]-tau_tilde_old_list[i])) for i in xrange(0,nl)])
+                #v_diff = np.mean([ np.mean(np.square(v_tilde_list[i]-v_tilde_old_list[i])) for i in xrange(0,nl)])
+            #tau_tilde_old_list = tau_tilde_list.copy()
+            #v_tilde_old_list = v_tilde_list.copy()
 
-            iterations += 1
+            #iterations += 1
         
-        mu_tilde_list = [v_tilde_list[i]/tau_tilde_list[i] for i in xrange(0,nl)]
+        #mu_tilde_list = [v_tilde_list[i]/tau_tilde_list[i] for i in xrange(0,nl)]
         
-        for i in xrange(0,nl):
-            # Z_tilde after removing the terms that can lead to infinite terms due to tau_tilde close to zero.
-            # This terms cancel with the coreresponding terms in the marginal loglikelihood
-            if likelihood_list[i].name is not 'Gaussian_noise':
-                log_Z_tilde_list[i] = (np.log(Z_hat_list[i]) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+tau_tilde_list[i]/tau_cav_list[i])
-                                - 0.5 * ((v_tilde_list[i])**2 * 1./(tau_cav_list[i] + tau_tilde_list[i])) + 0.5*(v_cav_list[i] * ( ( (tau_tilde_list[i]/tau_cav_list[i]) * v_cav_list[i] - 2.0 * v_tilde_list[i] ) * 1./(tau_cav_list[i] + tau_tilde_list[i]))))
-                                # - 0.5*np.log(tau_tilde) + 0.5*(v_tilde*v_tilde*1./tau_tilde)
-            else:
-                log_Z_tilde_list[i] = np.zeros(num_data_list[i],dtype=np.float64)
+        #for i in xrange(0,nl):
+            ## Z_tilde after removing the terms that can lead to infinite terms due to tau_tilde close to zero.
+            ## This terms cancel with the coreresponding terms in the marginal loglikelihood
+            #if likelihood_list[i].name is not 'Gaussian_noise':
+                #log_Z_tilde_list[i] = (np.log(Z_hat_list[i]) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+tau_tilde_list[i]/tau_list[i])
+                                #- 0.5 * ((v_tilde_list[i])**2 * 1./(tau_list[i] + tau_tilde_list[i])) + 0.5*(v_list[i] * ( ( (tau_tilde_list[i]/tau_list[i]) * v_list[i] - 2.0 * v_tilde_list[i] ) * 1./(tau_list[i] + tau_tilde_list[i]))))
+                                ## - 0.5*np.log(tau_tilde) + 0.5*(v_tilde*v_tilde*1./tau_tilde)
+            #else:
+                #log_Z_tilde_list[i] = np.zeros(num_data_list[i],dtype=np.float64)
 
-        self.old_mutilde = mu_tilde_list
-        self.old_vtilde = v_tilde_list
+        #self.old_mutilde = mu_tilde_list
+        #self.old_vtilde = v_tilde_list
 
-        return mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list
+        #return mu_list, Sigma_list, mu_tilde_list, tau_tilde_list, log_Z_tilde_list
 
     
-    def _ep_compute_posterior_for_all(self, K, tau_tilde_list, v_tilde_list, ind = None):
-        if ind is None:
-            nl = len(tau_tilde_list)
-            ind = [0]*(nl+1)
-            for i in xrange(1, nl+1):
-                nl_list[i] = nl_list[i-1] + tau_tilde_list[i-1].shape[0]       
-        nl = tau_tilde_list.shape(0)
-        tau_tilde = np.concatenate(tau_tilde_list, axis=0)
-        v_tilde = np.concatenate(v_tilde_list, axis=0)
-        mu, Sigma, L = self._ep_compute_posterior(K, tau_tilde, v_tilde)
-        mu_list = [mu[ind[i-1]:ind[i]] for i in xrange(1, nl+1)]
-        Sigma_list = [[Sigma[ind[i-1]:ind[i], ind[j-1]:ind[j]] for j in xrange(1, nl+1)] for i in xrange(1, nl+1)]
-        L_list = [[L[ind[i-1]:ind[i], ind[j-1]:ind[j]] for j in xrange(1, nl+1)] for i in xrange(1, nl+1)]
-        return mu_list, Sigma_list, L_list
+    #def _ep_compute_posterior_for_all(self, K, tau_tilde_list, v_tilde_list, ind = None):
+        #if ind is None:
+            #nl = len(tau_tilde_list)
+            #ind = [0]*(nl+1)
+            #for i in xrange(1, nl+1):
+                #ind[i] = ind[i-1] + tau_tilde_list[i-1].shape[0]       
+        #nl = tau_tilde_list.shape(0)
+        #tau_tilde = np.concatenate(tau_tilde_list, axis=0)
+        #v_tilde = np.concatenate(v_tilde_list, axis=0)
+        #mu, Sigma, L = self._ep_compute_posterior(K, tau_tilde, v_tilde)
+        #mu_list = [mu[ind[i-1]:ind[i]] for i in xrange(1, nl+1)]
+        #Sigma_list = [[Sigma[ind[i-1]:ind[i], ind[j-1]:ind[j]] for j in xrange(1, nl+1)] for i in xrange(1, nl+1)]
+        #L_list = [[L[ind[i-1]:ind[i], ind[j-1]:ind[j]] for j in xrange(1, nl+1)] for i in xrange(1, nl+1)]
+        #return mu_list, Sigma_list, L_list
     
     
 class EPDTC(EPBase, VarDTC):
@@ -436,8 +491,8 @@ class EPDTC(EPBase, VarDTC):
         mu_hat = np.zeros(num_data,dtype=np.float64)
         sigma2_hat = np.zeros(num_data,dtype=np.float64)
 
-        tau_cav = np.empty(num_data,dtype=np.float64)
-        v_cav = np.empty(num_data,dtype=np.float64)
+        tau = np.empty(num_data,dtype=np.float64)
+        v = np.empty(num_data,dtype=np.float64)
 
         #initial values - Gaussian factors
         #Initial values - Posterior distribution parameters: q(f|X,Y) = N(f|mu,Sigma)
@@ -474,8 +529,8 @@ class EPDTC(EPBase, VarDTC):
             update_order = np.random.permutation(num_data)
             for i in update_order:
                 #Cavity distribution parameters
-                tau_cav[i] = 1./Sigma_diag[i] - self.eta*tau_tilde[i]
-                v_cav[i] = mu[i]/Sigma_diag[i] - self.eta*v_tilde[i]
+                tau[i] = 1./Sigma_diag[i] - self.eta*tau_tilde[i]
+                v[i] = mu[i]/Sigma_diag[i] - self.eta*v_tilde[i]
                 if Y_metadata is not None:
                     # Pick out the relavent metadata for Yi
                     Y_metadata_i = {}
@@ -485,7 +540,7 @@ class EPDTC(EPBase, VarDTC):
                     Y_metadata_i = None
 
                 #Marginal moments
-                Z_hat[i], mu_hat[i], sigma2_hat[i] = likelihood.moments_match_ep(Y[i], tau_cav[i], v_cav[i], Y_metadata_i=Y_metadata_i)
+                Z_hat[i], mu_hat[i], sigma2_hat[i] = likelihood.moments_match_ep(Y[i], tau[i], v[i], Y_metadata_i=Y_metadata_i)
                 #Site parameters update
                 delta_tau = self.delta/self.eta*(1./sigma2_hat[i] - 1./Sigma_diag[i])
                 delta_v = self.delta/self.eta*(mu_hat[i]/sigma2_hat[i] - mu[i]/Sigma_diag[i])
@@ -524,8 +579,8 @@ class EPDTC(EPBase, VarDTC):
             iterations += 1
 
         mu_tilde = v_tilde/tau_tilde
-        mu_cav = v_cav/tau_cav
-        sigma2_sigma2tilde = 1./tau_cav + 1./tau_tilde
+        mu_cav = v/tau
+        sigma2_sigma2tilde = 1./tau + 1./tau_tilde
 
         log_Z_tilde = (np.log(Z_hat) + 0.5*np.log(2*np.pi) + 0.5*np.log(sigma2_sigma2tilde)
                          + 0.5*((mu_cav - mu_tilde)**2) / (sigma2_sigma2tilde))
@@ -558,14 +613,14 @@ class marginalMoments(object):
 
 class cavityParams(object):
     def __init__(self, num_data):
-        self.tau_cav = np.empty(num_data,dtype=np.float64)
-        self.v_cav = np.empty(num_data,dtype=np.float64)
+        self.tau = np.empty(num_data,dtype=np.float64)
+        self.v = np.empty(num_data,dtype=np.float64)
         
 class gaussianApproximation(object):
-    def __init__(self, mu_tilde, v_tilde, tau_tilde=None):
-        self.mu_tilde = mu_tilde
-        self.v_tilde = v_tilde
-        self.tau_tilde = mu_tilde / v_tilde if tau_tilde is None else tau_tilde
+    def __init__(self, mu, v, tau=None):
+        self.mu = mu
+        self.v = v
+        self.tau = mu / v if tau is None else tau
         
 class posteriorParams(object):
     def __init__(self, mu=None, Sigma=None, L=None):
