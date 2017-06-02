@@ -10,6 +10,7 @@ from .svgp import SVGP
 from .sparse_gp import SparseGP
 from .gp_grid import GpGrid
 from .mapping import *
+from .multioutput_gp import MultioutputGP
 
 
 #===========================================================================

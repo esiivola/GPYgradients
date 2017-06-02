@@ -1,6 +1,7 @@
 from .kern import Kern
 import numpy as np
 from functools import reduce
+from .independent_outputs import index_to_slices
 
 class MultioutputKern(Kern):
     def __init__(self, kern_list, cross_covariances={}):
@@ -34,7 +35,7 @@ class MultioutputKern(Kern):
                     covariance[i][j] = {'c': kern_list[i].dK_dX, 'ug': lambda dl_dk, x, x2: kern_list[i].update_gradients_dK_dX(dl_dk, x, x2, False)}
                     unique=False
                 elif kern_list[j].name == 'diffKern' and kern_list[j].base_kern == kern_list[i]: # one is derivative of other
-                    covariance[i][j] = {'c': lambda x,x2: np.kern_list[j].dK_dX2(x, x2), 'ug': lambda dk_dl, x, x2: kern_list[j].update_gradients_dK_dX2(dk_dl, x, x2, False)}
+                    covariance[i][j] = {'c': lambda x,x2: kern_list[j].dK_dX2(x, x2), 'ug': lambda dk_dl, x, x2: kern_list[j].update_gradients_dK_dX2(dk_dl, x, x2, False)}
                 elif kern_list[i].name == 'diffKern' and kern_list[j].name == 'diffKern' and kern_list[i].base_kern == kern_list[j].base_kern: #both are partial derivatives
                     covariance[i][j] = {'c': lambda x, x2: kern_list[i].K(x, x2, kern_list[j].dimension), 'ug': lambda dk_dl, x, x2: kern_list[i].update_gradients_full(dk_dl, x, x2, kern_list[j].dimension, False)}
                     if i>j:
@@ -50,7 +51,9 @@ class MultioutputKern(Kern):
     def parameters_changed(self):
         for kern in self.kern_list: kern.parameters_changed()
 
-    def K(self, X_list, X2_list): # NOTE: If any of the elements in  X or X2 are None, they are treated as non existent
+    def K(self, X_list, X2_list=None): # NOTE: If any of the elements in  X or X2 are None, they are treated as non existent
+        if X2_list is None:
+            X2_list =  X_list
         x_i = [i for i, e in enumerate(X_list) if e is not None]
         x2_i = [i for i, e in enumerate(X2_list) if e is not None]
         k = None
@@ -138,3 +141,140 @@ class MultioutputKern(Kern):
     def _check_input_dim(self, X):
         # As combination kernels cannot always know, what their inner kernels have as input dims, the check will be done inside them, respectively
         return
+    
+class MultioutputKern(CombinationKern):
+    def __init__(self, kernels, cross_covariances={}, index_dim=-1, name='MultioutputKern'):
+        assert isinstance(index_dim, int), "Multioutput kernel is only defined with one input dimension being the index"
+        if not isinstance(kernels, list):
+            self.single_kern = True
+            self.kern = kernels
+            kernels = [kernels]
+        else:
+            self.single_kern = False
+            self.kern = kernels
+        super(MultioutputKern, self).__init__(kernels=kernels, extra_dims=[index_dim], name=name)
+        # The combination kernel ALLWAYS puts the extra dimension last.
+        # Thus, the index dimension of this kernel is always the last dimension
+        # after slicing. This is why the index_dim is just the last column:
+        self.index_dim = -1
+        
+        nl = len(kern_list)
+         
+        #build covariance structure
+        covariance = [[None]*nl]*nl
+        linked = []
+        for i in range(0,nl):
+            unique=True
+            for j in range(0,nl):
+                if i==j:
+                    covariance[i][i] = {'c': kern_list[j].K, 'ug': lambda dl_dk, x, x2: kern_list[i].update_gradients_full(dl_dk, x, x2, False)}
+                elif cross_covariances.get((i,j)) is not None: #cross covariance is given
+                    covariance[i][j] = cross_covariances.get((i,j))
+                elif kern_list[i].name == 'diffKern' and kern_list[i].base_kern == kern_list[j]: # one is derivative of other
+                    covariance[i][j] = {'c': kern_list[i].dK_dX, 'ug': lambda dl_dk, x, x2: kern_list[i].update_gradients_dK_dX(dl_dk, x, x2, False)}
+                    unique=False
+                elif kern_list[j].name == 'diffKern' and kern_list[j].base_kern == kern_list[i]: # one is derivative of other
+                    covariance[i][j] = {'c': lambda x,x2: kern_list[j].dK_dX2(x, x2), 'ug': lambda dk_dl, x, x2: kern_list[j].update_gradients_dK_dX2(dk_dl, x, x2, False)}
+                elif kern_list[i].name == 'diffKern' and kern_list[j].name == 'diffKern' and kern_list[i].base_kern == kern_list[j].base_kern: #both are partial derivatives
+                    covariance[i][j] = {'c': lambda x, x2: kern_list[i].K(x, x2, kern_list[j].dimension), 'ug': lambda dk_dl, x, x2: kern_list[i].update_gradients_full(dk_dl, x, x2, kern_list[j].dimension, False)}
+                    if i>j:
+                      unique=False  
+                else: # zero matrix
+                    covariance[i][j] = {'c': lambda x, x2: np.zeros(x.shape[0],x2.shape[0]), 'ug': lambda x, x2: np.zeros(x.shape[0],x2.shape[0])}       
+            if unique is True:
+                linked.append(i)
+
+        self.covariance = covariance
+        self.link_parameters(*[kern_list[i] for i in linked])
+        
+
+    def K(self,X ,X2=None):
+        slices = index_to_slices(X[:,self.index_dim])
+        kerns = itertools.repeat(self.kern) if self.single_kern else self.kern
+        if X2 is None:
+            target = np.zeros((X.shape[0], X.shape[0]))
+            #[[target.__setitem__((s,ss), kern.K(X[s,:], X[ss,:])) for s,ss in itertools.product(slices_i, slices_i)] for kern, slices_i in zip(kerns, slices)]
+            [[target.__setitem__((s,ss), kern.K(X[s,:]) if s==ss else kern.K(X[s,:], X[ss,:])) for s,ss in itertools.product(slices_i, slices_i)] for kern, slices_i in zip(kerns, slices)]
+        else:
+            slices2 = index_to_slices(X2[:,self.index_dim])
+            target = np.zeros((X.shape[0], X2.shape[0]))
+            [[target.__setitem__((s,s2), kern.K(X[s,:],X2[s2,:])) for s,s2 in itertools.product(slices_i, slices_j)] for kern, slices_i,slices_j in zip(kerns, slices,slices2)]
+        return target
+
+    def Kdiag(self,X):
+        slices = index_to_slices(X[:,self.index_dim])
+        kerns = itertools.repeat(self.kern) if self.single_kern else self.kern
+        target = np.zeros(X.shape[0])
+        [[np.copyto(target[s], kern.Kdiag(X[s])) for s in slices_i] for kern, slices_i in zip(kerns, slices)]
+        return target
+
+    def update_gradients_full(self,dL_dK,X,X2=None):
+        slices = index_to_slices(X[:,self.index_dim])
+        if self.single_kern:
+            target = np.zeros(self.kern.size)
+            kerns = itertools.repeat(self.kern)
+        else:
+            kerns = self.kern
+            target = [np.zeros(kern.size) for kern, _ in zip(kerns, slices)]
+        def collate_grads(kern, i, dL, X, X2):
+            kern.update_gradients_full(dL,X,X2)
+            if self.single_kern: target[:] += kern.gradient
+            else: target[i][:] += kern.gradient
+        if X2 is None:
+            [[collate_grads(kern, i, dL_dK[s,ss], X[s], X[ss]) for s,ss in itertools.product(slices_i, slices_i)] for i,(kern,slices_i) in enumerate(zip(kerns,slices))]
+        else:
+            slices2 = index_to_slices(X2[:,self.index_dim])
+            [[[collate_grads(kern, i, dL_dK[s,s2],X[s],X2[s2]) for s in slices_i] for s2 in slices_j] for i,(kern,slices_i,slices_j) in enumerate(zip(kerns,slices,slices2))]
+        if self.single_kern:
+            self.kern.gradient = target
+        else:
+            [kern.gradient.__setitem__(Ellipsis, target[i]) for i, [kern, _] in enumerate(zip(kerns, slices))]
+
+    def gradients_X(self,dL_dK, X, X2=None):
+        target = np.zeros(X.shape)
+        kerns = itertools.repeat(self.kern) if self.single_kern else self.kern
+        if X2 is None:
+            values = np.unique(X[:,self.index_dim])
+            slices = [X[:,self.index_dim]==i for i in values]
+            for kern, s in zip(kerns, slices):
+                target[s] += kern.gradients_X(dL_dK[s, :][:, s],X[s], None)
+            #slices = index_to_slices(X[:,self.index_dim])
+            #[[np.add(target[s], kern.gradients_X(dL_dK[s,s], X[s]), out=target[s])
+            #  for s in slices_i] for kern, slices_i in zip(kerns, slices)]
+            #import ipdb;ipdb.set_trace()
+            #[[(np.add(target[s ], kern.gradients_X(dL_dK[s ,ss],X[s ], X[ss]), out=target[s ]),
+            #   np.add(target[ss], kern.gradients_X(dL_dK[ss,s ],X[ss], X[s ]), out=target[ss]))
+            #  for s, ss in itertools.combinations(slices_i, 2)] for kern, slices_i in zip(kerns, slices)]
+        else:
+            values = np.unique(X[:,self.index_dim])
+            slices = [X[:,self.index_dim]==i for i in values]
+            slices2 = [X2[:,self.index_dim]==i for i in values]
+            for kern, s, s2 in zip(kerns, slices, slices2):
+                target[s] += kern.gradients_X(dL_dK[s, :][:, s2],X[s],X2[s2])
+            # TODO: make work with index_to_slices
+            #slices = index_to_slices(X[:,self.index_dim])
+            #slices2 = index_to_slices(X2[:,self.index_dim])
+            #[[target.__setitem__(s, target[s] + kern.gradients_X(dL_dK[s,s2], X[s], X2[s2])) for s, s2 in itertools.product(slices_i, slices_j)] for kern, slices_i,slices_j in zip(kerns, slices,slices2)]
+        return target
+
+    def gradients_X_diag(self, dL_dKdiag, X):
+        slices = index_to_slices(X[:,self.index_dim])
+        kerns = itertools.repeat(self.kern) if self.single_kern else self.kern
+        target = np.zeros(X.shape)
+        for kern, slices_i in zip(kerns, slices):
+            for s in slices_i:
+                target[s] += kern.gradients_X_diag(dL_dKdiag[s],X[s])
+        return target
+
+    def update_gradients_diag(self, dL_dKdiag, X):
+        slices = index_to_slices(X[:,self.index_dim])
+        kerns = itertools.repeat(self.kern) if self.single_kern else self.kern
+        if self.single_kern: target = np.zeros(self.kern.size)
+        else: target = [np.zeros(kern.size) for kern, _ in zip(kerns, slices)]
+        def collate_grads(kern, i, dL, X):
+            kern.update_gradients_diag(dL,X)
+            if self.single_kern: target[:] += kern.gradient
+            else: target[i][:] += kern.gradient
+        [[collate_grads(kern, i, dL_dKdiag[s], X[s,:]) for s in slices_i] for i, (kern, slices_i) in enumerate(zip(kerns, slices))]
+        if self.single_kern: self.kern.gradient = target
+        else:[kern.gradient.__setitem__(Ellipsis, target[i]) for i, [kern, _] in enumerate(zip(kerns, slices))]

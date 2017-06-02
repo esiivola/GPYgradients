@@ -228,7 +228,7 @@ class FixedEP(EP):
         self.fixed_index = fixed_index
         self.fixed_gaussian_v = fixed_gaussian_v 
         self.fixed_gaussian_tau = fixed_gaussian_tau
-        return super(FixedEP, self).inference(kern, X_list, likelihood, Y, mean_function, Y_metadata, precision=None, K=None)
+        return super(FixedEP, self).inference(kern, X, likelihood, Y, mean_function, Y_metadata, precision=None, K=None)
 
     def _update_cavity_params(self, num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata, update_order=None):
         update_order = np.ones(num_data, np.bool)
@@ -252,19 +252,19 @@ class MultioutputEP(FixedEP):
         fixed_index, fixed_gaussian_v, fixed_gaussian_tau = likelihood.get_fixed_gaussian(X_list)
         Y_metadata = self._merge_metadata(X_list, Y_metadata_list)
         likelihood_index = None
-        for i in xrange(0, len(X_list)):
+        for i in range(0, len(X_list)):
             if likelihood_index is None:
                 likelihood_index = i*np.ones(X_list[i].shape[0])
             else:
-                likelihood_index.append(i*np.ones(X_list[i].shape[0]))
+                likelihood_index = np.r_[likelihood_index, i*np.ones(X_list[i].shape[0])]
         Y_metadata["likelihood"] = likelihood_index
-        return super(MultioutputEP, self).inference(kern, X, likelihood, np.array(list(itertools.chain(*Y))), fixed_index, fixed_gaussian_v,fixed_gaussian_tau, mean_function, Y_metadata, precision=None, K=None)
+        return super(MultioutputEP, self).inference(kern,  X_list, likelihood, np.array(list(itertools.chain(*Y_list))), fixed_index, fixed_gaussian_v,fixed_gaussian_tau, None, Y_metadata, precision=None, K=None)
     
     def _inference(self, K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata=None):
         posterior, log_marginal, dL = super(multioutputEP, self)._inference(K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata)
         return MultioutputPosterior(woodbury_inv=posterior.woodbury_inv(), woodbury_vector=posterior.woodbury_vector(), K=posterior.K()), log_marginal, {'dL_dK':dL_dK, 'dL_dthetaL':dL_dthetaL, 'dL_dm':alpha}
     
-    def _merge_metadata(X_list, Y_metadata_list):
+    def _merge_metadata(self, X_list, Y_metadata_list):
         if Y_metadata_list is None:
             return {}
         key_list = []

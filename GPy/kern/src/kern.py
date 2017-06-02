@@ -316,7 +316,7 @@ class CombinationKernel(Kern):
     A combination kernel combines (a list of) kernels and works on those.
     Examples are the HierarchicalKernel or Add and Prod kernels.
     """
-    def __init__(self, kernels, name, extra_dims=[]):
+    def __init__(self, kernels, name, extra_dims=[], link_params=True):
         """
         Abstract super class for combination kernels.
         A combination kernel combines (a list of) kernels and works on those.
@@ -340,7 +340,8 @@ class CombinationKernel(Kern):
         self._all_dims_active = np.array(np.concatenate((np.arange(effective_input_dim), extra_dims if extra_dims is not None else [])), dtype=int)
 
         self.extra_dims = extra_dims
-        self.link_parameters(*kernels)
+        if link_params: 
+            self.link_parameters(*kernels)
 
     @property
     def parts(self):
