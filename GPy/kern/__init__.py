@@ -34,7 +34,7 @@ from .src.splitKern import DEtime as DiffGenomeKern
 from .src.spline import Spline
 from .src.basis_funcs import LogisticBasisFuncKernel, LinearSlopeBasisFuncKernel, BasisFuncKernel, ChangePointBasisFuncKernel, DomainKernel, PolynomialBasisFuncKernel
 from .src.grid_kerns import GridRBF
-from .src.multioutput_kern import MultioutputKern
+from .src.multioutput_kern import MultioutputKern, MultioutputKern2
 from .src.diff_kern import DiffKern
 
 from .src.sde_matern import sde_Matern32

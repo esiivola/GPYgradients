@@ -1,4 +1,4 @@
-from .kern import Kern
+from .kern import Kern, CombinationKernel
 import numpy as np
 from functools import reduce
 from .independent_outputs import index_to_slices
@@ -32,10 +32,10 @@ class MultioutputKern(Kern):
                 elif cross_covariances.get((i,j)) is not None: #cross covariance is given
                     covariance[i][j] = cross_covariances.get((i,j))
                 elif kern_list[i].name == 'diffKern' and kern_list[i].base_kern == kern_list[j]: # one is derivative of other
-                    covariance[i][j] = {'c': kern_list[i].dK_dX, 'ug': lambda dl_dk, x, x2: kern_list[i].update_gradients_dK_dX(dl_dk, x, x2, False)}
+                    covariance[i][j] = {'c': kern_list[i].dK_dX, 'ug': lambda dl_dk, x, x2: kern_list[i].update_gradients_dK_dX(dl_dk, x[:,:-1], x2[:,:-1], False)}
                     unique=False
                 elif kern_list[j].name == 'diffKern' and kern_list[j].base_kern == kern_list[i]: # one is derivative of other
-                    covariance[i][j] = {'c': lambda x,x2: kern_list[j].dK_dX2(x, x2), 'ug': lambda dk_dl, x, x2: kern_list[j].update_gradients_dK_dX2(dk_dl, x, x2, False)}
+                    covariance[i][j] = {'c': lambda x,x2: kern_list[j].dK_dX2(x[:,:-1], x2[:,:-1]), 'ug': lambda dk_dl, x, x2: kern_list[j].update_gradients_dK_dX2(dk_dl, x[:,:-1], x2[:,:-1], False)}
                 elif kern_list[i].name == 'diffKern' and kern_list[j].name == 'diffKern' and kern_list[i].base_kern == kern_list[j].base_kern: #both are partial derivatives
                     covariance[i][j] = {'c': lambda x, x2: kern_list[i].K(x, x2, kern_list[j].dimension), 'ug': lambda dk_dl, x, x2: kern_list[i].update_gradients_full(dk_dl, x, x2, kern_list[j].dimension, False)}
                     if i>j:
@@ -142,7 +142,7 @@ class MultioutputKern(Kern):
         # As combination kernels cannot always know, what their inner kernels have as input dims, the check will be done inside them, respectively
         return
     
-class MultioutputKern(CombinationKern):
+class MultioutputKern2(CombinationKernel):
     def __init__(self, kernels, cross_covariances={}, index_dim=-1, name='MultioutputKern'):
         assert isinstance(index_dim, int), "Multioutput kernel is only defined with one input dimension being the index"
         if not isinstance(kernels, list):
@@ -152,53 +152,51 @@ class MultioutputKern(CombinationKern):
         else:
             self.single_kern = False
             self.kern = kernels
-        super(MultioutputKern, self).__init__(kernels=kernels, extra_dims=[index_dim], name=name)
+        super(MultioutputKern2, self).__init__(kernels=kernels, extra_dims=[index_dim], name=name, link_params=False)
         # The combination kernel ALLWAYS puts the extra dimension last.
         # Thus, the index dimension of this kernel is always the last dimension
         # after slicing. This is why the index_dim is just the last column:
         self.index_dim = -1
         
-        nl = len(kern_list)
+        nl = len(kernels)
          
         #build covariance structure
-        covariance = [[None]*nl]*nl
+        covariance = [[None for i in range(nl)] for j in range(nl)]
         linked = []
         for i in range(0,nl):
             unique=True
             for j in range(0,nl):
-                if i==j:
-                    covariance[i][i] = {'c': kern_list[j].K, 'ug': lambda dl_dk, x, x2: kern_list[i].update_gradients_full(dl_dk, x, x2, False)}
+                if i==j or (kernels[i] is kernels[j]):
+                    covariance[i][j] = {'c': kernels[i].K, 'ug': lambda dl_dk, x, x2: kernels[i].update_gradients_full(dl_dk, x, x2, False)}
+                    if i>j:
+                        unique=False
                 elif cross_covariances.get((i,j)) is not None: #cross covariance is given
                     covariance[i][j] = cross_covariances.get((i,j))
-                elif kern_list[i].name == 'diffKern' and kern_list[i].base_kern == kern_list[j]: # one is derivative of other
-                    covariance[i][j] = {'c': kern_list[i].dK_dX, 'ug': lambda dl_dk, x, x2: kern_list[i].update_gradients_dK_dX(dl_dk, x, x2, False)}
+                elif kernels[i].name == 'diffKern' and kernels[i].base_kern == kernels[j]: # one is derivative of other
+                    covariance[i][j] = {'c': kernels[i].dK_dX, 'ug': lambda dl_dk, x, x2: kernels[i].update_gradients_dK_dX(dl_dk, x, x2, False)}
                     unique=False
-                elif kern_list[j].name == 'diffKern' and kern_list[j].base_kern == kern_list[i]: # one is derivative of other
-                    covariance[i][j] = {'c': lambda x,x2: kern_list[j].dK_dX2(x, x2), 'ug': lambda dk_dl, x, x2: kern_list[j].update_gradients_dK_dX2(dk_dl, x, x2, False)}
-                elif kern_list[i].name == 'diffKern' and kern_list[j].name == 'diffKern' and kern_list[i].base_kern == kern_list[j].base_kern: #both are partial derivatives
-                    covariance[i][j] = {'c': lambda x, x2: kern_list[i].K(x, x2, kern_list[j].dimension), 'ug': lambda dk_dl, x, x2: kern_list[i].update_gradients_full(dk_dl, x, x2, kern_list[j].dimension, False)}
+                elif kernels[j].name == 'diffKern' and kernels[j].base_kern == kernels[i]: # one is derivative of other
+                    covariance[i][j] = {'c': lambda x,x2: kernels[j].dK_dX2(x, x2), 'ug': lambda dk_dl, x, x2: kernels[j].update_gradients_dK_dX2(dk_dl, x, x2, False)}
+                elif kernels[i].name == 'diffKern' and kernels[j].name == 'diffKern' and kernels[i].base_kern == kernels[j].base_kern: #both are partial derivatives
+                    covariance[i][j] = {'c': lambda x, x2: kernels[i].K(x, x2, kernels[j].dimension), 'ug': lambda dk_dl, x, x2: kernels[i].update_gradients_full(dk_dl, x, x2, kernels[j].dimension, False)}
                     if i>j:
-                      unique=False  
+                        unique=False
                 else: # zero matrix
-                    covariance[i][j] = {'c': lambda x, x2: np.zeros(x.shape[0],x2.shape[0]), 'ug': lambda x, x2: np.zeros(x.shape[0],x2.shape[0])}       
+                    covariance[i][j] = {'c': lambda x, x2: np.zeros((x.shape[0],x2.shape[0])), 'ug': lambda x, x2: np.zeros((x.shape[0],x2.shape[0]))}       
             if unique is True:
                 linked.append(i)
-
+                
         self.covariance = covariance
-        self.link_parameters(*[kern_list[i] for i in linked])
+        self.link_parameters(*[kernels[i] for i in linked])
         
 
-    def K(self,X ,X2=None):
-        slices = index_to_slices(X[:,self.index_dim])
-        kerns = itertools.repeat(self.kern) if self.single_kern else self.kern
+    def K(self, X ,X2=None):
         if X2 is None:
-            target = np.zeros((X.shape[0], X.shape[0]))
-            #[[target.__setitem__((s,ss), kern.K(X[s,:], X[ss,:])) for s,ss in itertools.product(slices_i, slices_i)] for kern, slices_i in zip(kerns, slices)]
-            [[target.__setitem__((s,ss), kern.K(X[s,:]) if s==ss else kern.K(X[s,:], X[ss,:])) for s,ss in itertools.product(slices_i, slices_i)] for kern, slices_i in zip(kerns, slices)]
-        else:
-            slices2 = index_to_slices(X2[:,self.index_dim])
-            target = np.zeros((X.shape[0], X2.shape[0]))
-            [[target.__setitem__((s,s2), kern.K(X[s,:],X2[s2,:])) for s,s2 in itertools.product(slices_i, slices_j)] for kern, slices_i,slices_j in zip(kerns, slices,slices2)]
+            X2 = X
+        slices = index_to_slices(X[:,self.index_dim])
+        slices2 = index_to_slices(X2[:,self.index_dim])
+        target =  np.zeros((X.shape[0], X2.shape[0]))
+        [[[[ target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['c'](X[slices[i][k],:],X2[slices2[j][l],:])) for k in range( len(slices[i]))] for l in range(len(slices2[j])) ] for i in range(len(slices))] for j in range(len(slices2))]  
         return target
 
     def Kdiag(self,X):
