@@ -137,6 +137,18 @@ class Stationary(Kern):
         dist = X[:,None,:]-X2[None,:,:]
         return -1.0*self._scaled_dist(X, X2)/self.lengthscale if (not self.ARD) else np.rollaxis(-1.0*(rinv[:,:,None]*(dist**2)/(self.lengthscale**3)),2,0)
 
+    def dr2_dlengthscaledX(self, X, X2):
+        rinv = self._inv_dist(X, X2)
+        rinv3 = rinv**3
+        dist = np.rollaxis(X[:,None,:] - X2[None,:,:],2,0)
+        dist2 = dist**2
+        invlengthscale = 1/self.lengthscale
+        I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        return rinv3[None,:,:]*dist*dist2.sum(axis=0)*(invlengthscale[:,None,None]**5) -2.0*dist*rinv[None,:,:]*(invlengthscale[:,None,None]**3) if (not self.ARD) else rinv3[None,None,:,:]*dist[None,:,:,:]*(invlengthscale[None,:,None,None]**2)*dist2[:,None,:,:]*(invlengthscale[:,None,None,None]**3) -2.0*I*rinv[None,None,:,:]*dist[None,:,:,:]*(invlengthscale[None,:,None,None]**3)
+
+    def dr2_dlengthscaledX2(self, X, X2):
+        return -1.0*self.dr2_dlengthscaledX(X, X2)
+    
     def dr2_dXdX2(self, X, X2=None):
         if X2 is None:
             X2 = X
@@ -309,7 +321,7 @@ class Stationary(Kern):
             g2 = [g2]
         else:
             g2 = [g2[i,:,:,:,:] for i in xrange(0,self.input_dim)]
-        return list(itertools.chain(*[g1, g2]))
+        return list(itertools.chain(*[[g1], g2]))
 
     def _unscaled_dist(self, X, X2=None):
         """

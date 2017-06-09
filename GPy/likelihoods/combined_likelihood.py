@@ -9,6 +9,7 @@ from GPy.likelihoods.link_functions import Log, Identity
 from GPy.likelihoods.likelihood import Likelihood
 from GPy.core.parameterization import Param
 from GPy.core.parameterization.transformations import Logexp
+from GPy.util.multioutput import index_to_slices
 
 class CombinedLikelihood(Likelihood):
     """Combination of likelihoods, EP inference for all except gaussian likelihoods"""
@@ -28,21 +29,15 @@ class CombinedLikelihood(Likelihood):
     def moments_match_ep(self, data_i, tau_i, v_i, Y_metadata_i=None):
         return self.likelihoods[Y_metadata_i["likelihood"]].moments_match_ep(data_i, tau_i, v_i, Y_metadata_i)
     
-    def get_fixed_gaussian(self, X_list): #fixed_index, fixed_gaussian_v, fixed_gaussian_tau
-        nl = len(self.likelihoods)
-        t1 = 0
-        index = np.empty(0)
-        tau = np.empty(0)
-        v = np.empty(0)
-        for i in range(0,nl):
-            t2 = t1 if X_list[i] is None else X_list[i].size+t1 
-            if self.likelihoods[i].name is 'Gaussian_noise':
-                index = np.r_[index, range(t1, t2)]
-                tau = np.r_[tau, np.ones(X_list[i].size, dtype=np.float64)*1./self.likelihoods[i].variance]
-                v = np.r_[v, np.ones(X_list[i].size, dtype=np.float64)*1./self.likelihoods[i].variance]
-            t1 = t2
-        return index, tau, v
+    def get_fixed_gaussian(self, X, Y, index_dim=-1): #fixed_index, fixed_gaussian_v, fixed_gaussian_tau
+        likelihood_i = np.array(X[:,index_dim], dtype=np.int)
+        gaussian_i = [i for i in range(len(self.likelihoods)) if self.likelihoods[i].name is 'Gaussian_noise']
+        index = np.asarray([i for i in range(X.size[0]) if X[i,index_dim] in gaussian_i], dtype=np.int)
+        tau = np.asarray([1./self.likelihoods[i].variance for i in likelihood_i if i in gaussian_i], dtype=np.float64)
+        v = np.asarray([Y[i] for i in likelihood_i if i in gaussian_i], dtype=np.float64) * tau
         
+        
+
     def predictive_values(self, mu_list, var_list, full_cov=False, Y_metadata_list=None):
         nl = len(self.likelihoods)
         mu = [None]*nl
@@ -51,15 +46,17 @@ class CombinedLikelihood(Likelihood):
         for i in range(0,nl):
             mu[i], var[i] = self.likelihoods[i].predictive_values(mu_list[i], var_list[i], full_cov, Y_metadata_list[i])
         return mu, var
+    
+  
 
-    def predictive_mean(self, mu_list, sigma_list):
+    def predictive_mean(self, mu, sigma, Y_metadata):
         nl = len(self.likelihoods)
         mu = [None]*nl
         for i in range(0,nl):
             mu[i] = self.likelihoods[i].predictive_mean(mu_list[i], sigma_list[i])
         return mu, var
 
-    def predictive_variance(self, mu_list, sigma_list, predictive_mean_list=None):
+    def predictive_variance(self, mu, sigma, Y_metadata):
         nl = len(self.likelihoods)
         var = [None]*nl
         predictive_mean_list = [None]*nl if predictive_mean_list is None else predictive_mean_list 
@@ -67,7 +64,7 @@ class CombinedLikelihood(Likelihood):
             var[i] = self.likelihoods[i].predictive_variance(mu_list[i], sigma_list[i], predictive_mean_list[i])
         return var
 
-    def predictive_quantiles(self, mu_list, var_list, quantiles, Y_metadata_list=None):
+    def predictive_quantiles(self, mu, var, quantiles, Y_metadata):
         nl = len(self.likelihoods)
         quant = [None]*nl
         Y_metadata_list = [None]*nl if Y_metadata_list is None else Y_metadata_list

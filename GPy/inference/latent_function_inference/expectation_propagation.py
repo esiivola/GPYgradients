@@ -7,7 +7,7 @@ from paramz import ObsAr
 from . import ExactGaussianInference, VarDTC
 from ...util import diag
 from .posterior import PosteriorEP as Posterior
-from .posterior import MultioutputPosteriorEP as MultioutputPosterior
+#from .posterior import MultioutputPosteriorEP as MultioutputPosterior
 
 log_2_pi = np.log(2*np.pi)
 
@@ -130,41 +130,41 @@ class EP(EPBase, ExactGaussianInference):
                 + 0.5*(cav_params.v * ( ( (ga_approx.tau/cav_params.tau) * cav_params.v - 2.0 * ga_approx.v ) * 1./(cav_params.tau + ga_approx.tau))))
     
     def _update_cavity_params(self, num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata, update_order=None):
-            if update_order is None:
-                update_order = np.random.permutation(num_data)
-            for i in update_order:
-                #Cavity distribution parameters
-                cav_params.tau[i] = 1./post_params.Sigma[i,i] - self.eta*ga_approx.tau[i]
-                cav_params.v[i] = post_params.mu[i]/post_params.Sigma[i,i] - self.eta*ga_approx.v[i]
-                if Y_metadata is not None:
-                    # Pick out the relavent metadata for Yi
-                    Y_metadata_i = {}
-                    for key in Y_metadata.keys():
-                        Y_metadata_i[key] = Y_metadata[key][i, :]
-                else:
-                    Y_metadata_i = None
-                #Marginal moments
-                marg_moments.Z_hat[i], marg_moments.mu_hat[i], marg_moments.sigma2_hat[i] = likelihood.moments_match_ep(Y[i], cav_params.tau[i], cav_params.v[i], Y_metadata_i=Y_metadata_i)
-                
-                #Site parameters update
-                delta_tau = self.delta/self.eta*(1./marg_moments.sigma2_hat[i] - 1./post_params.Sigma[i,i])
-                delta_v = self.delta/self.eta*(marg_moments.mu_hat[i]/marg_moments.sigma2_hat[i] - post_params.mu[i]/post_params.Sigma[i,i])
-                tau_tilde_prev = ga_approx.tau[i]
-                ga_approx.tau[i] += delta_tau
+        if update_order is None:
+            update_order = np.random.permutation(num_data)
+        for i in update_order:
+            #Cavity distribution parameters
+            cav_params.tau[i] = 1./post_params.Sigma[i,i] - self.eta*ga_approx.tau[i]
+            cav_params.v[i] = post_params.mu[i]/post_params.Sigma[i,i] - self.eta*ga_approx.v[i]
+            if Y_metadata is not None:
+                # Pick out the relavent metadata for Yi
+                Y_metadata_i = {}
+                for key in Y_metadata.keys():
+                    Y_metadata_i[key] = Y_metadata[key][i, :]
+            else:
+                Y_metadata_i = None
+            #Marginal moments
+            marg_moments.Z_hat[i], marg_moments.mu_hat[i], marg_moments.sigma2_hat[i] = likelihood.moments_match_ep(Y[i], cav_params.tau[i], cav_params.v[i], Y_metadata_i=Y_metadata_i)
+            
+            #Site parameters update
+            delta_tau = self.delta/self.eta*(1./marg_moments.sigma2_hat[i] - 1./post_params.Sigma[i,i])
+            delta_v = self.delta/self.eta*(marg_moments.mu_hat[i]/marg_moments.sigma2_hat[i] - post_params.mu[i]/post_params.Sigma[i,i])
+            tau_tilde_prev = ga_approx.tau[i]
+            ga_approx.tau[i] += delta_tau
 
-                # Enforce positivity of tau_tilde. Even though this is guaranteed for logconcave sites, it is still possible
-                # to get negative values due to numerical errors. Moreover, the value of tau_tilde should be positive in order to
-                # update the marginal likelihood without inestability issues.
-                if ga_approx.tau[i] < np.finfo(float).eps:
-                    ga_approx.tau[i] = np.finfo(float).eps
-                    delta_tau = ga_approx.tau[i] - tau_tilde_prev
-                ga_approx.v[i] += delta_v
+            # Enforce positivity of tau_tilde. Even though this is guaranteed for logconcave sites, it is still possible
+            # to get negative values due to numerical errors. Moreover, the value of tau_tilde should be positive in order to
+            # update the marginal likelihood without inestability issues.
+            if ga_approx.tau[i] < np.finfo(float).eps:
+                ga_approx.tau[i] = np.finfo(float).eps
+                delta_tau = ga_approx.tau[i] - tau_tilde_prev
+            ga_approx.v[i] += delta_v
 
-                if self.parallel_updates == False:
-                    #Posterior distribution parameters update
-                    ci = delta_tau/(1.+ delta_tau*post_params.Sigma[i,i])
-                    DSYR(post_params.Sigma, post_params.Sigma[:,i].copy(), -ci)
-                    post_params.mu = np.dot(post_params.Sigma, ga_approx.v)
+            if self.parallel_updates == False:
+                #Posterior distribution parameters update
+                ci = delta_tau/(1.+ delta_tau*post_params.Sigma[i,i])
+                DSYR(post_params.Sigma, post_params.Sigma[:,i].copy(), -ci)
+                post_params.mu = np.dot(post_params.Sigma, ga_approx.v)
                     
     def _init_approximations(self, K, num_data):
         #initial values - Gaussian factors
@@ -208,7 +208,6 @@ class EP(EPBase, ExactGaussianInference):
 
     def _inference(self, K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata=None):
         log_marginal, mu, Sigma, L = self._ep_marginal(K, tau_tilde, v_tilde, Z_tilde)
-
         tau_tilde_root = np.sqrt(tau_tilde)
         Sroot_tilde_K = tau_tilde_root[:,None] * K
 
@@ -226,63 +225,61 @@ class EP(EPBase, ExactGaussianInference):
 class FixedEP(EP):
     def inference(self, kern, X, likelihood, Y, fixed_index, fixed_gaussian_v, fixed_gaussian_tau, mean_function, Y_metadata, precision=None, K=None):
         self.fixed_index = fixed_index
+        self.ep_index = list( set(range(X.shape[0]))- set(fixed_index))
         self.fixed_gaussian_v = fixed_gaussian_v 
         self.fixed_gaussian_tau = fixed_gaussian_tau
         return super(FixedEP, self).inference(kern, X, likelihood, Y, mean_function, Y_metadata, precision=None, K=None)
 
     def _update_cavity_params(self, num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata, update_order=None):
-        update_order = np.ones(num_data, np.bool)
-        update_order[self.fixed_index] = 0
+        update_order = np.random.permutation(self.ep_index)
         super(FixedEP, self)._update_cavity_params(num_data, cav_params, post_params, marg_moments, ga_approx, likelihood, Y, Y_metadata, np.random.permutation(update_order))
-        for i in self.fixed_index:
-                self.ga_approx.v[i] = self.fixed_gaussian_v[i]
-                self.ga_approx_tau[i] = self.fixed_gaussian_tau[i]
+        ga_approx.v[self.fixed_index] = self.fixed_gaussian_v
+        ga_approx.tau[self.fixed_index] = self.fixed_gaussian_tau
       
     def _log_Z_tilde(self, marg_moments, ga_approx, cav_params):
         num_data = ga_approx.tau.shape[0]
         tmp = np.zeros(num_data,dtype=np.float64)
-        for i in xrange(0, num_data ):
-            if self.fixed_index[i] < 1:
+        for i in self.ep_index:
                 tmp[i] = (np.log(marg_moments.Z_hat[i]) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau[i]/cav_params.tau[i]) - 0.5 * ((ga_approx.v[i])**2 * 1./(cav_params.tau[i] + ga_approx.tau[i])) 
                         + 0.5*(cav_params.v[i] * ( ( (ga_approx.tau[i]/cav_params.tau[i]) * cav_params.v[i] - 2.0 * ga_approx.v[i] ) * 1./(cav_params.tau[i] + ga_approx.tau[i]))))
         return tmp
     
 class MultioutputEP(FixedEP):
-    def inference(self, kern, X_list, likelihood, Y_list, mean_function_list=None, Y_metadata_list=None, precision=None, K=None):
-        fixed_index, fixed_gaussian_v, fixed_gaussian_tau = likelihood.get_fixed_gaussian(X_list)
-        Y_metadata = self._merge_metadata(X_list, Y_metadata_list)
-        likelihood_index = None
-        for i in range(0, len(X_list)):
-            if likelihood_index is None:
-                likelihood_index = i*np.ones(X_list[i].shape[0])
-            else:
-                likelihood_index = np.r_[likelihood_index, i*np.ones(X_list[i].shape[0])]
-        Y_metadata["likelihood"] = likelihood_index
-        return super(MultioutputEP, self).inference(kern,  X_list, likelihood, np.array(list(itertools.chain(*Y_list))), fixed_index, fixed_gaussian_v,fixed_gaussian_tau, None, Y_metadata, precision=None, K=None)
+    def inference(self, kern, X, likelihood, Y, mean_function=None, Y_metadata=None, precision=None, K=None):
+        fixed_index, fixed_gaussian_tau, fixed_gaussian_v = likelihood.get_fixed_gaussian(X, Y)
+        return super(MultioutputEP, self).inference(kern,  X, likelihood, Y, fixed_index, fixed_gaussian_v,fixed_gaussian_tau, None, Y_metadata, precision, K)
     
-    def _inference(self, K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata=None):
-        posterior, log_marginal, dL = super(multioutputEP, self)._inference(K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata)
-        return MultioutputPosterior(woodbury_inv=posterior.woodbury_inv(), woodbury_vector=posterior.woodbury_vector(), K=posterior.K()), log_marginal, {'dL_dK':dL_dK, 'dL_dthetaL':dL_dthetaL, 'dL_dm':alpha}
+    #def _inference(self, K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata=None):
+        #posterior, log_marginal, dL = super(MultioutputEP, self)._inference(K, tau_tilde, v_tilde, likelihood, Z_tilde, Y_metadata)
+        #return MultioutputPosterior(woodbury_inv=posterior.woodbury_inv, woodbury_vector=posterior.woodbury_vector, K=posterior.K), log_marginal, {'dL_dK':dL["dL_dK"], 'dL_dthetaL':dL["dL_dthetaL"], 'dL_dm':dL["dL_dm"]}
     
-    def _merge_metadata(self, X_list, Y_metadata_list):
-        if Y_metadata_list is None:
-            return {}
-        key_list = []
-        for metadata in Y_metadata_list:
-            new_keys = list(metadata.keys())
-            for key in new_keys:
-                key_list.append(key)
+        #likelihood_index = None
+        #for i in range(0, len(X_list)):
+        #    if likelihood_index is None:
+        #        likelihood_index = i*np.ones(X_list[i].shape[0])
+        #    else:
+        #        likelihood_index = np.r_[likelihood_index, i*np.ones(X_list[i].shape[0])]
+        #Y_metadata["likelihood"] = likelihood_index
+    
+    #def _merge_metadata(self, X_list, Y_metadata_list):
+        #if Y_metadata_list is None:
+            #return {}
+        #key_list = []
+        #for metadata in Y_metadata_list:
+            #new_keys = list(metadata.keys())
+            #for key in new_keys:
+                #key_list.append(key)
                 
-        key_list = List(Set(key_list))
-        Y_metadata
-        for key in key_list:
-            value = None
-            for md_temp in Y_metadata_list:
-                tmp = md_temp.get(key)
-                if tmp is not None:
-                    value.append(tmp, axis=0)
-            Y_metadata[key] =  value
-        return Y_metadata
+        #key_list = List(Set(key_list))
+        #Y_metadata
+        #for key in key_list:
+            #value = None
+            #for md_temp in Y_metadata_list:
+                #tmp = md_temp.get(key)
+                #if tmp is not None:
+                    #value.append(tmp, axis=0)
+            #Y_metadata[key] =  value
+        #return Y_metadata
         
         
 #class multioutputEP(EP):

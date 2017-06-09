@@ -19,6 +19,9 @@ def put_clean(dct, name, func):
 class KernCallsViaSlicerMeta(ParametersChangedMeta):
     def __new__(cls, name, bases, dct):
         put_clean(dct, 'K', _slice_K)
+        put_clean(dct, 'dK_dX', _slice_K)
+        put_clean(dct, 'dK_dX2', _slice_K)
+        put_clean(dct, 'dK2_dXdX2', _slice_K)
         put_clean(dct, 'Kdiag', _slice_Kdiag)
         put_clean(dct, 'phi', _slice_Kdiag)
         put_clean(dct, 'update_gradients_full', _slice_update_gradients_full)
@@ -97,17 +100,17 @@ def _slice_Kdiag(f):
 
 def _slice_update_gradients_full(f):
     @wraps(f)
-    def wrap(self, dL_dK, X, X2=None):
+    def wrap(self, dL_dK, X, X2=None, *a, **kw):
         with _Slice_wrap(self, X, X2) as s:
-            ret = f(self, dL_dK, s.X, s.X2)
+            ret = f(self, dL_dK, s.X, s.X2, *a, **kw)
         return ret
     return wrap
 
 def _slice_update_gradients_diag(f):
     @wraps(f)
-    def wrap(self, dL_dKdiag, X):
+    def wrap(self, dL_dKdiag, X, *a, **kw):
         with _Slice_wrap(self, X, None) as s:
-            ret = f(self, dL_dKdiag, s.X)
+            ret = f(self, dL_dKdiag, s.X, *a, **kw)
         return ret
     return wrap
 
