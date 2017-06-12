@@ -28,7 +28,7 @@ class DiffKern(CombinationKernel):
     def dK_dX2(self, X, X2): #X in dimension self.dimension
         return np.squeeze(self.base_kern.dK_dX2(X,X2)[self.dimension,:,:])
     
-    def update_gradients_full(self, dL_dK, X, X2=None, dimX2=None, reset=True):
+    def update_gradients_full(self, dL_dK, X, X2=None, reset=True, dimX2=None):
         if dimX2 is None:
             dimX2 = self.dimension
         gradients = self.base_kern.dgradients2_dXdX2(X,X2)

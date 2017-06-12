@@ -25,6 +25,8 @@ class KernCallsViaSlicerMeta(ParametersChangedMeta):
         put_clean(dct, 'Kdiag', _slice_Kdiag)
         put_clean(dct, 'phi', _slice_Kdiag)
         put_clean(dct, 'update_gradients_full', _slice_update_gradients_full)
+        put_clean(dct, 'update_gradients_dK_dX', _slice_update_gradients_full)
+        put_clean(dct, 'update_gradients_dK_dX2', _slice_update_gradients_full)
         put_clean(dct, 'update_gradients_diag', _slice_update_gradients_diag)
         put_clean(dct, 'gradients_X', _slice_gradients_X)
         put_clean(dct, 'gradients_X_X2', _slice_gradients_X)

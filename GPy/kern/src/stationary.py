@@ -397,7 +397,6 @@ class Stationary(Kern):
         and store in the parameters object as e.g. self.variance.gradient
         """
         if reset: self.reset_gradients()
-        
         self.variance.gradient += np.sum(self.K(X, X2)* dL_dK)/self.variance
 
         #now the lengthscale gradient(s)

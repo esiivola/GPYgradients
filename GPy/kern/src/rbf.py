@@ -115,6 +115,6 @@ class RBF(Stationary):
         super(RBF,self).update_gradients_diag(dL_dKdiag, X)
         if self.use_invLengthscale: self.inv_l.gradient =self.lengthscale.gradient*(self.lengthscale**3/-2.)
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
-        super(RBF,self).update_gradients_full(dL_dK, X, X2)
+    def update_gradients_full(self, dL_dK, X, X2=None, reset=True):
+        super(RBF,self).update_gradients_full(dL_dK, X, X2, reset)
         if self.use_invLengthscale: self.inv_l.gradient =self.lengthscale.gradient*(self.lengthscale**3/-2.)
