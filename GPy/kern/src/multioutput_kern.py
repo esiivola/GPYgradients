@@ -217,15 +217,15 @@ class MultioutputKern(CombinationKernel):
         print("variance gradient:")
         print(self.kern[0].variance.gradient)
         d = 0.00001
-        k = self.K(X,X2)
-        lg_orig=self.kern[0].lengthscale
-        self.kern[0].lengthscale._update_on = False
-        self.kern[0].lengthscale += d
-        k2 = self.K(X,X2)
-        self.kern[0].lengthscale = lg_orig
-        print("ref lg g")
-        print(np.sum(((k2-k)/d)*dL_dK))
-        self.kern[0].lengthscale._update_on = True
+        #k = self.K(X,X2)
+        #lg_orig=self.kern[0].lengthscale
+        #self.kern[0].lengthscale._update_on = False
+        #self.kern[0].lengthscale += d
+        #k2 = self.K(X,X2)
+        #self.kern[0].lengthscale = lg_orig
+        #print("ref lg g")
+        #print(np.sum(((k2-k)/d)*dL_dK))
+        #self.kern[0].lengthscale._update_on = True
         ko = self.K(X,X2)
         v_orig=self.kern[0].variance
         self.kern[0].variance._update_on = False
@@ -233,9 +233,10 @@ class MultioutputKern(CombinationKernel):
         k2 = self.K(X,X2)
         self.kern[0].variance = v_orig
         print("ref v g")
-        print(np.sum(((k2-ko)/d)*dL_dK))
+        print(np.sum((k2-ko)/d))
+        print(np.sum(dL_dK))
         self.kern[0].variance._update_on = True
-        print(np.sum(ko-k))
+        #print(np.sum(ko-k))
         
     def update_gradients_diag(self, dL_dKdiag, X):
         for kern in self.kerns: kern.reset_gradients()
