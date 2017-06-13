@@ -49,9 +49,5 @@ class MultioutputGP(GP):
         assert isinstance(likelihood_list, list)
         likelihood = likelihoods.MixedNoise(likelihood_list)
         
-        super(MultioutputGP, self).__init__(X,Y,kernel,likelihood, Y_metadata={'output_index':self.output_index}, inference_method = expectation_propagation.EP())
-        self.parameters_changed()
-        #self._model_initialized_ = True
-        #self._checkgrad(verbose=True)
-                                            
+        super(MultioutputGP, self).__init__(X,Y,kernel,likelihood, Y_metadata={'output_index':self.output_index}, inference_method = expectation_propagation.EP())                             
                                             #expectation_propagation.MultioutputEP())

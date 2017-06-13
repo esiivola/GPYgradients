@@ -237,13 +237,13 @@ class FixedEP(EP):
         ga_approx.v[self.fixed_index] = self.fixed_gaussian_v
         ga_approx.tau[self.fixed_index] = self.fixed_gaussian_tau
       
-    #def _log_Z_tilde(self, marg_moments, ga_approx, cav_params):
-        #num_data = ga_approx.tau.shape[0]
-        #tmp = np.zeros(num_data,dtype=np.float64)
-        #for i in self.ep_index:
-                #tmp[i] = (np.log(marg_moments.Z_hat[i]) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau[i]/cav_params.tau[i]) - 0.5 * ((ga_approx.v[i])**2 * 1./(cav_params.tau[i] + ga_approx.tau[i])) 
-                        #+ 0.5*(cav_params.v[i] * ( ( (ga_approx.tau[i]/cav_params.tau[i]) * cav_params.v[i] - 2.0 * ga_approx.v[i] ) * 1./(cav_params.tau[i] + ga_approx.tau[i]))))
-        #return tmp
+    def _log_Z_tilde(self, marg_moments, ga_approx, cav_params):
+        num_data = ga_approx.tau.shape[0]
+        tmp = np.zeros(num_data,dtype=np.float64)
+        for i in self.ep_index:
+                tmp[i] = (np.log(marg_moments.Z_hat[i]) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau[i]/cav_params.tau[i]) - 0.5 * ((ga_approx.v[i])**2 * 1./(cav_params.tau[i] + ga_approx.tau[i])) 
+                        + 0.5*(cav_params.v[i] * ( ( (ga_approx.tau[i]/cav_params.tau[i]) * cav_params.v[i] - 2.0 * ga_approx.v[i] ) * 1./(cav_params.tau[i] + ga_approx.tau[i]))))
+        return tmp
     
 class MultioutputEP(FixedEP):
     def inference(self, kern, X, likelihood, Y, mean_function=None, Y_metadata=None, precision=None, K=None):
