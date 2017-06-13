@@ -45,7 +45,7 @@ class ExactGaussianInference(LatentFunctionInference):
         Wi, LW, LWi, W_logdet = pdinv(Ky)
 
         alpha, _ = dpotrs(LW, YYT_factor, lower=1)
-
+        
         log_marginal =  0.5*(-Y.size * log_2_pi - Y.shape[1] * W_logdet - np.sum(alpha * YYT_factor))
 
         if Z_tilde is not None:
@@ -53,7 +53,9 @@ class ExactGaussianInference(LatentFunctionInference):
             # In EP this is log Z_tilde, which is the difference between the
             # Gaussian marginal and Z_EP
             log_marginal += Z_tilde
-
+        
+        #print("W_logdet: {}, alphay: {}, Z_tilde: {}, log_marginal: {}".format( -0.5*Y.shape[1]*W_logdet, -0.5*np.sum(alpha * YYT_factor), Z_tilde, log_marginal))
+        
         dL_dK = 0.5 * (tdot(alpha) - Y.shape[1] * Wi)
 
         dL_dthetaL = likelihood.exact_inference_gradients(np.diag(dL_dK), Y_metadata)

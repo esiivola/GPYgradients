@@ -32,7 +32,7 @@ class MixedNoise(Likelihood):
         self.log_concave = False
 
     def moments_match_ep(self, data_i, tau_i, v_i, Y_metadata_i):
-        return self.likelihoods_list[Y_metadata_i["output_index"]].moments_match_ep(data_i, tau_i, v_i, Y_metadata_i)
+        return self.likelihoods_list[Y_metadata_i["output_index"][0]].moments_match_ep(data_i, tau_i, v_i, Y_metadata_i)
     
     def get_fixed_gaussian(self, X, Y, index_dim=-1): #fixed_index, fixed_gaussian_v, fixed_gaussian_tau
         likelihood_i = np.array(X[:,index_dim], dtype=np.int)

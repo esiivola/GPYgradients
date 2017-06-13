@@ -26,9 +26,9 @@ class Model(ParamzModel, Priorizable):
         (including the MAP prior), so we return it here. If your model is not
         probabilistic, just return your objective to minimize here!
         """
-        print("objective function")
-        print("log_likelihood: {}".format(float(self.log_likelihood())))
-        print("log prior: {}".format(self.log_prior()))
+        #print("objective function")
+        #print("log_likelihood: {}".format(float(self.log_likelihood())))
+        #print("log prior: {}".format(self.log_prior()))
         return -float(self.log_likelihood()) - self.log_prior()
 
     def objective_function_gradients(self):
@@ -48,7 +48,7 @@ class Model(ParamzModel, Priorizable):
         (including the MAP prior), so we return it here. If your model is not
         probabilistic, just return your *negative* gradient here!
         """
-        print("objective function grads")
-        print("log_likelihood: {}".format(self._log_likelihood_gradients()))
-        print("log prior: {}".format(self._log_prior_gradients()))
+        #print("objective function grads")
+        #print("log_likelihood: {}".format(self._log_likelihood_gradients()))
+        #print("log prior: {}".format(self._log_prior_gradients()))
         return -(self._log_likelihood_gradients() + self._log_prior_gradients())
