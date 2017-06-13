@@ -616,4 +616,144 @@ class GP(Model):
         """
         mu_star, var_star = self._raw_predict(x_test)
         return self.likelihood.log_predictive_density_sampling(y_test, mu_star, var_star, Y_metadata=Y_metadata, num_samples=num_samples)
+    
+    def check_gradients(self, df=1e-7):
+        x = self.optimizer_array.copy()
+        analytic = self._log_likelihood_gradients()
+        num = [0 in range(len(analytic))]
+        log_orig = self.log_likelihood()
+        x = self.optimizer_array.copy()
+        for i in range(len(x)):
+            x[i]._update_on = False
+            t = x.values
+            x[i] += df
+            log_new = self.log_likelihood()
+            num[i] = (log_new-log_orig)/d 
+            x[i].values = t
+            x[i]._update_on = True
+        print(num-analytic)
+        
+    def checkgrad(self, target_param=None, verbose=False, step=1e-6, tolerance=1e-3, df_tolerance=1e-12):
+        """
+        Check the gradient of the ,odel by comparing to a numerical
+        estimate.  If the verbose flag is passed, individual
+        components are tested (and printed)
+        :param verbose: If True, print a "full" checking of each parameter
+        :type verbose: bool
+        :param step: The size of the step around which to linearise the objective
+        :type step: float (default 1e-6)
+        :param tolerance: the tolerance allowed (see note)
+        :type tolerance: float (default 1e-3)
+        Note:-
+            The gradient is considered correct if the ratio of the analytical
+            and numerical gradients is within <tolerance> of unity.
+            The *dF_ratio* indicates the limit of numerical accuracy of numerical gradients.
+            If it is too small, e.g., smaller than 1e-12, the numerical gradients are usually
+            not accurate enough for the tests (shown with blue).
+        """
+        if not self._model_initialized_:
+            import warnings
+            warnings.warn("This model has not been initialized, try model.inititialize_model()", RuntimeWarning)
+            return False
+
+        x = self.optimizer_array.copy()
+
+        if not verbose:
+            # make sure only to test the selected parameters
+            if target_param is None:
+                transformed_index = np.arange(len(x))
+            else:
+                transformed_index = self._raveled_index_for_transformed(target_param)
+
+                if transformed_index.size == 0:
+                    print("No free parameters to check")
+                    return True
+
+            # just check the global ratio
+            dx = np.zeros(x.shape)
+            dx[transformed_index] = step * (np.sign(np.random.uniform(-1, 1, transformed_index.size)) if transformed_index.size != 2 else 1.)
+
+            # evaulate around the point x
+            f1 = self._objective(x + dx)
+            f2 = self._objective(x - dx)
+            gradient = self._grads(x)
+
+            dx = dx[transformed_index]
+            gradient = gradient[transformed_index]
+
+            denominator = (2 * np.dot(dx, gradient))
+            global_ratio = (f1 - f2) / np.where(denominator == 0., 1e-32, denominator)
+            global_diff = np.abs(f1 - f2) < tolerance and np.allclose(gradient, 0, atol=tolerance)
+            if global_ratio is np.nan: # pragma: no cover
+                global_ratio = 0
+            return np.abs(1. - global_ratio) < tolerance or global_diff
+        else:
+            # check the gradient of each parameter individually, and do some pretty printing
+            try:
+                names = self.parameter_names_flat()
+            except NotImplementedError:
+                names = ['Variable %i' % i for i in range(len(x))]
+            # Prepare for pretty-printing
+            header = ['Name', 'Ratio', 'Difference', 'Analytical', 'Numerical', 'dF_ratio']
+            max_names = max([len(names[i]) for i in range(len(names))] + [len(header[0])])
+            float_len = 10
+            cols = [max_names]
+            cols.extend([max(float_len, len(header[i])) for i in range(1, len(header))])
+            cols = np.array(cols) + 5
+            header_string = ["{h:^{col}}".format(h=header[i], col=cols[i]) for i in range(len(cols))]
+            header_string = list(map(lambda x: '|'.join(x), [header_string]))
+            separator = '-' * len(header_string[0])
+            print('\n'.join([header_string[0], separator]))
+
+            if target_param is None:
+                target_param = self
+            transformed_index = self._raveled_index_for_transformed(target_param)
+
+            if transformed_index.size == 0:
+                print("No free parameters to check")
+                return True
+
+            gradient = self._grads(x).copy()
+            np.where(gradient == 0, 1e-312, gradient)
+            ret = True
+            for xind in zip(transformed_index):
+                xx = x.copy()
+                xx[xind] += step
+                f1 = float(self._objective(xx))
+                xx[xind] -= 2.*step
+                f2 = float(self._objective(xx))
+                #Avoid divide by zero, if any of the values are above 1e-15, otherwise both values are essentiall
+                #the same
+                if f1 > 1e-15 or f1 < -1e-15 or f2 > 1e-15 or f2 < -1e-15:
+                    df_ratio = np.abs((f1 - f2) / min(f1, f2))
+                else: # pragma: no cover
+                    df_ratio = 1.0
+                df_unstable = df_ratio < df_tolerance
+                numerical_gradient = (f1 - f2) / (2. * step)
+                if np.all(gradient[xind] == 0): # pragma: no cover
+                    ratio = (f1 - f2) == gradient[xind]
+                else:
+                    ratio = (f1 - f2) / (2. * step * gradient[xind])
+                difference = np.abs(numerical_gradient - gradient[xind])
+
+                if (np.abs(1. - ratio) < tolerance) or np.abs(difference) < tolerance:
+                    formatted_name = "\033[92m {0} \033[0m".format(names[xind])
+                    ret &= True
+                else:  # pragma: no cover
+                    formatted_name = "\033[91m {0} \033[0m".format(names[xind])
+                    ret &= False
+                if df_unstable:  # pragma: no cover
+                    formatted_name = "\033[94m {0} \033[0m".format(names[xind])
+
+                r = '%.6f' % float(ratio)
+                d = '%.6f' % float(difference)
+                g = '%.6f' % gradient[xind]
+                ng = '%.6f' % float(numerical_gradient)
+                df = '%1.e' % float(df_ratio)
+                grad_string = "{0:<{c0}}|{1:^{c1}}|{2:^{c2}}|{3:^{c3}}|{4:^{c4}}|{5:^{c5}}".format(formatted_name, r, d, g, ng, df, c0=cols[0] + 9, c1=cols[1], c2=cols[2], c3=cols[3], c4=cols[4], c5=cols[5])
+                print(grad_string)
+
+            self.optimizer_array = x
+            return ret
+        
 
