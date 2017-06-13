@@ -206,17 +206,19 @@ class MultioutputKern(CombinationKernel):
         return target
 
     def update_gradients_full(self,dL_dK,X,X2=None):
+        print("dldk")
+        print(dL_dK)
         for kern in self.kern: kern.reset_gradients()
         if X2 is None:
             X2 = X
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])
         [[[[ self.covariance[i][j]['ug'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]
-        #print("lengthscale_gradient:")
-        #print(self.kern[0].lengthscale.gradient)
-        #print("variance gradient:")
-        #print(self.kern[0].variance.gradient)
-        #d = 0.00001
+        print("lengthscale_gradient:")
+        print(self.kern[0].lengthscale.gradient)
+        print("variance gradient:")
+        print(self.kern[0].variance.gradient)
+        d = 0.00001
         ##k = self.K(X,X2)
         ##lg_orig=self.kern[0].lengthscale
         ##self.kern[0].lengthscale._update_on = False
@@ -226,16 +228,16 @@ class MultioutputKern(CombinationKernel):
         ##print("ref lg g")
         ##print(np.sum(((k2-k)/d)*dL_dK))
         ##self.kern[0].lengthscale._update_on = True
-        #ko = self.K(X,X2)
-        #v_orig=self.kern[0].variance
-        #self.kern[0].variance._update_on = False
-        #self.kern[0].variance += d
-        #k2 = self.K(X,X2)
-        #self.kern[0].variance = v_orig
-        #print("ref v g")
-        #print((k2-ko)/d)
+        ko = self.K(X,X2)
+        v_orig=self.kern[0].variance
+        self.kern[0].variance._update_on = False
+        self.kern[0].variance += d
+        k2 = self.K(X,X2)
+        self.kern[0].variance = v_orig
+        print("ref v g")
+        print((k2-ko)/d)
         ##print(np.sum(dL_dK))
-        #self.kern[0].variance._update_on = True
+        self.kern[0].variance._update_on = True
         ##print(np.sum(ko-k))
         
     def update_gradients_diag(self, dL_dKdiag, X):
