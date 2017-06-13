@@ -214,11 +214,12 @@ class MultioutputKern(CombinationKernel):
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])
         [[[[ self.covariance[i][j]['ug'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]
-        print('new iter')
-        print("ls {}".format(self.kern[0].lengthscale.values))
-        print("v {}".format(self.kern[0].variance.values))
-        print("lengthscale gradient: {}".format(self.kern[0].lengthscale.gradient))
-        print("variance gradient: {}".format(self.kern[0].variance.gradient))
+        #print('new iter')
+        #print("dldk: {}".format(np.sum(dL_dK)))
+        #print("ls {}".format(self.kern[0].lengthscale.values))
+        #print("v {}".format(self.kern[0].variance.values))
+        #print("lengthscale gradient: {}".format(self.kern[0].lengthscale.gradient))
+        #print("variance gradient: {}".format(self.kern[0].variance.gradient))
         #d = 0.00001
         #k = self.K(X,X2)
         #lg_orig=self.kern[0].lengthscale
