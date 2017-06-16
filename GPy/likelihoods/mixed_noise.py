@@ -32,7 +32,7 @@ class MixedNoise(Likelihood):
         self.log_concave = False
 
     def moments_match_ep(self, data_i, tau_i, v_i, Y_metadata_i):
-        return self.likelihoods_list[Y_metadata_i["output_index"]].moments_match_ep(data_i, tau_i, v_i, Y_metadata_i)
+        return self.likelihoods_list[Y_metadata_i["output_index"][0]].moments_match_ep(data_i, tau_i, v_i, Y_metadata_i)
     
     def get_fixed_gaussian(self, X, Y, index_dim=-1): #fixed_index, fixed_gaussian_v, fixed_gaussian_tau
         likelihood_i = np.array(X[:,index_dim], dtype=np.int)
@@ -53,15 +53,27 @@ class MixedNoise(Likelihood):
     def betaY(self,Y,Y_metadata):
         #TODO not here.
         return Y/self.gaussian_variance(Y_metadata=Y_metadata)[:,None]
+    
+    def reset_gradients(self):
+        for likelihood in self.likelihoods_list:
+            likelihood.reset_gradients()
 
-    def update_gradients(self, gradients):
-        self.gradient = gradients
+    def update_gradients(self, gradients, reset=True):
+        if reset:
+            self.reset_gradients()
+        j=0
+        for i in range(len(self.groups)):
+            s = j + self.likelihoods_list[self.groups[i][0]].size
+            self.likelihoods_list[self.groups[i][0]].update_gradients( gradients[j:s], False)
+            j = s
+            
+        #self.gradient = gradients
 
     def exact_inference_gradients(self, dL_dKdiag, Y_metadata):
-        assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
-        ind = Y_metadata['output_index'].flatten()
-        grad = np.array([dL_dKdiag[ind==i].sum() for i in range(len(self.likelihoods_list))])
-        return self._collide_to_groups(grad)
+       #assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
+       ind = Y_metadata['output_index'].flatten()
+       grad = np.array([self.likelihoods_list[i].exact_inference_gradients(dL_dKdiag[ind==i], None) for i in range(len(self.likelihoods_list))])
+       return self._collide_to_groups(grad)
 
     def predictive_values(self, mu, var, full_cov=False, Y_metadata=None):
         ind = Y_metadata['output_index'].flatten()
@@ -132,8 +144,9 @@ class MixedNoise(Likelihood):
     def _collide_to_groups(self, orig):
         new = []
         for group in self.groups:
-            temp = 0
+            temp = None
             for ind in group:
-                temp += orig[ind]
-            new.append(temp)
+                temp = temp + orig[ind] if (temp is not None and orig[ind] is not None) else (orig[ind] if orig[ind] is not None else None)
+            if temp is not None:
+                new.append(temp)
         return np.array(new)

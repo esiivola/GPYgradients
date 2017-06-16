@@ -21,9 +21,9 @@ class Binomial(Likelihood):
     .. See also::
         likelihood.py, for the parent class
     """
-    def __init__(self, gp_link=None):
+    def __init__(self, gp_link=None, nu=1.0):
         if gp_link is None:
-            gp_link = link_functions.Probit()
+            gp_link = link_functions.Probit(nu = nu)
 
         super(Binomial, self).__init__(gp_link, 'Binomial')
 
@@ -48,25 +48,26 @@ class Binomial(Likelihood):
         return np.exp(self.logpdf_link(inv_link_f, y, Y_metadata))
 
     def logpdf_link(self, inv_link_f, y, Y_metadata=None):
-        """
-        Log Likelihood function given inverse link of f.
-
-        .. math::
-            \\ln p(y_{i}|\\lambda(f_{i})) = y_{i}\\log\\lambda(f_{i}) + (1-y_{i})\\log (1-f_{i})
-
-        :param inv_link_f: latent variables inverse link of f.
-        :type inv_link_f: Nx1 array
-        :param y: data
-        :type y: Nx1 array
-        :param Y_metadata: Y_metadata must contain 'trials'
-        :returns: log likelihood evaluated at points inverse link of f.
-        :rtype: float
-        """
-        N = Y_metadata['trials']
-        np.testing.assert_array_equal(N.shape, y.shape)
-
-        nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
-        return nchoosey + y*np.log(inv_link_f) + (N-y)*np.log(1.-inv_link_f)
+       """
+       Log Likelihood function given inverse link of f.        .. math::
+           \\ln p(y_{i}|\\lambda(f_{i})) = y_{i}\\log\\lambda(f_{i}) + (1-y_{i})\\log (1-f_{i})        :param inv_link_f: latent variables inverse link of f.
+       :type inv_link_f: Nx1 array
+       :param y: data
+       :type y: Nx1 array
+       :param Y_metadata: Y_metadata must contain 'trials'
+       :returns: log likelihood evaluated at points inverse link of f.
+       :rtype: float
+       """
+       N = Y_metadata.get('trials', np.ones(y.shape))
+       np.testing.assert_array_equal(N.shape, y.shape)
+           
+       nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
+       if (inv_link_f < 1e-8 and  y>0) or (inv_link_f > 1-1e-8 and (N-y) >0):
+           return -np.inf
+       elif inv_link_f < 1e-8 or inv_link_f > 1-1e-8:
+           return nchoosey
+       else:
+           return nchoosey + y*np.log(inv_link_f) + (N-y)*np.log(1.-inv_link_f)
 
     def dlogpdf_dlink(self, inv_link_f, y, Y_metadata=None):
         """
@@ -147,11 +148,12 @@ class Binomial(Likelihood):
         orig_shape = gp.shape
         gp = gp.flatten()
         N = Y_metadata['trials']
-        Ysim = np.random.binomial(N, self.gp_link.transf(gp))
+        Ysim = np.random.binomial(N, self.gp_link.transf(gp/self.nu))
         return Ysim.reshape(orig_shape)
-
-    def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
+    
+    def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None): #No hyperparameters: No gradients
         pass
+      
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):
         if isinstance(self.gp_link, link_functions.Probit):
 
@@ -179,5 +181,21 @@ class Binomial(Likelihood):
         else:
             raise NotImplementedError
 
-
-
+    def moments_match_ep(self,obs,tau,v,Y_metadata_i=None):
+        if isinstance(self.gp_link, link_functions.Probit):
+            nu = self.gp_link.nu
+            mu = v/tau
+            sigma2 = 1./tau
+            a = np.sqrt(1 + sigma2/(nu**2))
+            z = obs*mu/a
+            normc_z = self.gp_link.transf(z)
+            m0 = normc_z
+            normp_z = self.gp_link.dtransf_df(z)
+            m1 = mu + (obs*sigma2*normp_z)/(normc_z*a)   
+            m2 = sigma2 - ((sigma2**2)*normp_z)/((nu**2+sigma2)*normc_z)*(z + normp_z*nu**2/normc_z)
+            #print("m0: {}, m1: {}, m2: {}".format(m0,m1,m2))
+            #m0a, m1a, m2a =  super(Binomial, self).moments_match_ep(obs,tau,v,Y_metadata_i)
+            #print("m0a: {}, m1a: {}, m2a: {}".format(m0a,m1a,m2a))
+            return m0, m1, m2
+        else:
+            return super(Binomial, self).moments_match_ep(obs,tau,v,Y_metadata_i)

@@ -51,8 +51,12 @@ class Likelihood(Parameterized):
 
     def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
         return np.zeros(self.size)
-
-    def update_gradients(self, partial):
+    
+    def reset_gradients(self):
+        if self.size > 0:
+            raise NotImplementedError('Must be implemented for likelihoods with parameters to be optimized')
+        
+    def update_gradients(self, partial, reset=True):
         if self.size > 0:
             raise NotImplementedError('Must be implemented for likelihoods with parameters to be optimized')
 

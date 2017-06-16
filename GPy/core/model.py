@@ -49,6 +49,6 @@ class Model(ParamzModel, Priorizable):
         probabilistic, just return your *negative* gradient here!
         """
         #print("objective function grads")
-        print("\nlog_likelihood: {}".format(self._log_likelihood_gradients()))
+        #print("\nlog_likelihood: {}".format(self._log_likelihood_gradients()))
         #print("log prior: {}".format(self._log_prior_gradients()))
         return -(self._log_likelihood_gradients() + self._log_prior_gradients())

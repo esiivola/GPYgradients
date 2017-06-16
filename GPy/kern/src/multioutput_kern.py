@@ -205,8 +205,12 @@ class MultioutputKern(CombinationKernel):
         [[np.copyto(target[s], kern.Kdiag(X[s])) for s in slices_i] for kern, slices_i in zip(kerns, slices)]
         return target
 
-    def update_gradients_full(self,dL_dK,X,X2=None):
+    def reset_gradients(self):
         for kern in self.kern: kern.reset_gradients()
+
+    def update_gradients_full(self,dL_dK,X,X2=None, reset=True):
+        if reset:
+            self.reset_gradients()
         if X2 is None:
             X2 = X
         slices = index_to_slices(X[:,self.index_dim])
