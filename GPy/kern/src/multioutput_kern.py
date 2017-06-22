@@ -1,6 +1,6 @@
 from .kern import Kern, CombinationKernel
 import numpy as np
-from functools import reduce
+from functools import reduce, partial
 #from .independent_outputs import index_to_slices
 from GPy.util.multioutput import index_to_slices
 
@@ -178,7 +178,8 @@ class MultioutputKern(CombinationKernel):
                 elif kernels[j].name == 'diffKern' and kernels[j].base_kern == kernels[i]: # one is derivative of other
                     covariance[i][j] = {'c': kernels[j].dK_dX2, 'ug': kernels[j].update_gradients_dK_dX2}
                 elif kernels[i].name == 'diffKern' and kernels[j].name == 'diffKern' and kernels[i].base_kern == kernels[j].base_kern: #both are partial derivatives
-                    covariance[i][j] = {'c': lambda x, x2: kernels[i].K(x, x2, kernels[j].dimension), 'ug': lambda dk_dl, x, x2, reset: kernels[i].update_gradients_full(dk_dl, x, x2, reset=reset, dimX2 = kernels[j].dimension)}
+                    covariance[i][j] = {'c': partial(kernels[i].K, dimX2=kernels[j].dimension), 'ug': partial(kernels[i].update_gradients_full, dimX2=kernels[j].dimension)}
+                    #covariance[i][j] = {'c': lambda x, x2: kernels[i].K(x, x2, kernels[j].dimension), 'ug': lambda dk_dl, x, x2, reset: kernels[i].update_gradients_full(dk_dl, x, x2, reset=reset, dimX2 = kernels[j].dimension)}
                     if i>j:
                         unique=False
                 else: # zero matrix
