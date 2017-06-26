@@ -53,5 +53,5 @@ class MultioutputGP(GP):
                                             #expectation_propagation.MultioutputEP())
 
     def predict_noiseless(self,  Xnew, full_cov=False, Y_metadata=None, kern=None):
-        X, temp1, temp2  = util.multioutput.build_XY(Xnew,None)
+        X, _, _  = util.multioutput.build_XY(Xnew,None)
         return super(MultioutputGP, self).predict_noiseless(X, full_cov, Y_metadata, kern)
