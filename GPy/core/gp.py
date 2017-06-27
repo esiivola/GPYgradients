@@ -755,5 +755,3 @@ class GP(Model):
 
             self.optimizer_array = x
             return ret
-        
-

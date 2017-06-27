@@ -53,5 +53,29 @@ class MultioutputGP(GP):
                                             #expectation_propagation.MultioutputEP())
 
     def predict_noiseless(self,  Xnew, full_cov=False, Y_metadata=None, kern=None):
-        X, _, _  = util.multioutput.build_XY(Xnew,None)
-        return super(MultioutputGP, self).predict_noiseless(X, full_cov, Y_metadata, kern)
+        if isinstance(Xnew, list):
+            Xnew, _, ind  = util.multioutput.build_XY(Xnew,None)
+            if Y_metadata is None:
+                Y_metadata={'output_index': ind}
+        return super(MultioutputGP, self).predict_noiseless(Xnew, full_cov, Y_metadata, kern)
+    
+    def predict(self, Xnew, full_cov=False, Y_metadata=None, kern=None, likelihood=None, include_likelihood=True):
+        if isinstance(Xnew, list):
+            Xnew, _, ind  = util.multioutput.build_XY(Xnew,None)
+            if Y_metadata is None:
+                Y_metadata={'output_index': ind}
+        return super(MultioutputGP, self).predict(Xnew, full_cov, Y_metadata, kern, likelihood, include_likelihood)
+    
+    def predict_quantiles(self, X, quantiles=(2.5, 97.5), Y_metadata=None, kern=None, likelihood=None):
+        if isinstance(X, list):
+            X, _, ind  = util.multioutput.build_XY(X,None)
+            if Y_metadata is None:
+                Y_metadata={'output_index': ind}
+        return super(MultioutputGP, self).predict_quantiles(X, quantiles, Y_metadata, kern, likelihood)
+    
+    def predictive_gradients(self, Xnew, kern=None):
+        if isinstance(Xnew, list):
+            Xnew, _, ind  = util.multioutput.build_XY(Xnew, None)
+            if Y_metadata is None:
+                Y_metadata={'output_index': ind}
+        return super(MultioutputGP, self).predictive_gradients(Xnew, kern)
