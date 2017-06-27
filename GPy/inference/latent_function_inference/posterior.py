@@ -313,16 +313,16 @@ class PosteriorEP(Posterior):
 
         return mu, var
     
-class MultioutputPosteriorEP(PosteriorEP):
+#class MultioutputPosteriorEP(PosteriorEP):
     
-    def _raw_predict(self, kern, Xnew, pred_var, full_cov=False): # doesn't work with multidim chol
-        mu, var = super(MultioutputPosteriorEP, self)._raw_predict(kern, Xnew, pred_var, full_cov)
-        #put it to a list so that we can distinguish the means of different likelihoods
-        nl = len(Xnew)
-        ind = [0]*(nl+1)
-        for i in range(1, nl+1):
-            ind[i] = ind[i-1] + Xnew[i-1].shape[0]
-        mu_list = [ mu[ind[i]:ind[i+1]] for i in range(0,nl)]
-        var_list = [var[ind[i]:ind[i+1],:] for i in range(0,nl)]
-        return mu_list, var
+    #def _raw_predict(self, kern, Xnew, pred_var, full_cov=False): # doesn't work with multidim chol
+        #mu, var = super(MultioutputPosteriorEP, self)._raw_predict(kern, Xnew, pred_var, full_cov)
+        ##put it to a list so that we can distinguish the means of different likelihoods
+        #nl = len(Xnew)
+        #ind = [0]*(nl+1)
+        #for i in range(1, nl+1):
+            #ind[i] = ind[i-1] + Xnew[i-1].shape[0]
+        #mu_list = [ mu[ind[i]:ind[i+1]] for i in range(0,nl)]
+        #var_list = [var[ind[i]:ind[i+1],:] for i in range(0,nl)]
+        #return mu_list, var
         

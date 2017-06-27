@@ -53,9 +53,15 @@ class Gaussian(Likelihood):
 
     def gaussian_variance(self, Y_metadata=None):
         return self.variance
-
-    def update_gradients(self, grad):
-        self.variance.gradient = grad
+    
+    def reset_gradients(self):
+        self.variance.gradient = 0
+    
+    def update_gradients(self, grad, reset=True):
+        if reset:
+            self.variance.gradient = grad
+        else:
+            self.variance.gradient += grad
 
     def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
         return dL_dKdiag.sum()
