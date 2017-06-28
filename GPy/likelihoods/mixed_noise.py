@@ -62,12 +62,11 @@ class MixedNoise(Likelihood):
         if reset:
             self.reset_gradients()
         j=0
+        print(gradients)
         for i in range(len(self.groups)):
             s = j + self.likelihoods_list[self.groups[i][0]].size
             self.likelihoods_list[self.groups[i][0]].update_gradients( gradients[j:s], False)
             j = s
-            
-        #self.gradient = gradients
 
     def exact_inference_gradients(self, dL_dKdiag, Y_metadata):
        #assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])

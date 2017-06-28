@@ -21,9 +21,9 @@ class Binomial(Likelihood):
     .. See also::
         likelihood.py, for the parent class
     """
-    def __init__(self, gp_link=None, nu=1.0):
+    def __init__(self, gp_link=None):
         if gp_link is None:
-            gp_link = link_functions.Probit(nu = nu)
+            gp_link = link_functions.Probit()
 
         super(Binomial, self).__init__(gp_link, 'Binomial')
 
@@ -32,7 +32,7 @@ class Binomial(Likelihood):
         Likelihood function given inverse link of f.
 
         .. math::
-            p(y_{i}|\\lambda(f_{i})) = \\lambda(f_{i})^{y_{i}}(1-f_{i})^{1-y_{i}}
+            py(_{i}|\\lambda(f_{i})) = \\lambda(f_{i})^{y_{i}}(1-f_{i})^{1-y_{i}}
 
         :param inv_link_f: latent variables inverse link of f.
         :type inv_link_f: Nx1 array
@@ -48,26 +48,34 @@ class Binomial(Likelihood):
         return np.exp(self.logpdf_link(inv_link_f, y, Y_metadata))
 
     def logpdf_link(self, inv_link_f, y, Y_metadata=None):
-       """
-       Log Likelihood function given inverse link of f.        .. math::
-           \\ln p(y_{i}|\\lambda(f_{i})) = y_{i}\\log\\lambda(f_{i}) + (1-y_{i})\\log (1-f_{i})        :param inv_link_f: latent variables inverse link of f.
-       :type inv_link_f: Nx1 array
-       :param y: data
-       :type y: Nx1 array
-       :param Y_metadata: Y_metadata must contain 'trials'
-       :returns: log likelihood evaluated at points inverse link of f.
-       :rtype: float
-       """
-       N = Y_metadata.get('trials', np.ones(y.shape))
-       np.testing.assert_array_equal(N.shape, y.shape)
-           
-       nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
-       if (inv_link_f < 1e-8 and  y>0) or (inv_link_f > 1-1e-8 and (N-y) >0):
-           return -np.inf
-       elif inv_link_f < 1e-8 or inv_link_f > 1-1e-8:
-           return nchoosey
-       else:
-           return nchoosey + y*np.log(inv_link_f) + (N-y)*np.log(1.-inv_link_f)
+        """
+        Log Likelihood function given inverse link of f.
+
+        .. math::
+            \\ln p(y_{i}|\\lambda(f_{i})) = y_{i}\\log\\lambda(f_{i}) + (1-y_{i})\\log (1-f_{i})
+
+        :param inv_link_f: latent variables inverse link of f.
+        :type inv_link_f: Nx1 array
+        :param y: data
+        :type y: Nx1 array
+        :param Y_metadata: Y_metadata must contain 'trials'
+        :returns: log likelihood evaluated at points inverse link of f.
+        :rtype: float
+        """
+        N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
+        np.testing.assert_array_equal(N.shape, y.shape)
+
+        nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
+        return nchoosey + y*np.log(inv_link_f) + (N-y)*np.log(1.-inv_link_f)
+
+        #nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
+        #si = inv_link
+        #if (inv_link_f < 1e-8 and  y>0) or (inv_link_f > 1-1e-8 and (N-y) >0):
+            #return -np.inf
+        #elif inv_link_f < 1e-8 or inv_link_f > 1-1e-8:
+            #return nchoosey
+        #else:
+            #return nchoosey + y*np.log(inv_link_f) + (N-y)*np.log(1.-inv_link_f)
 
     def dlogpdf_dlink(self, inv_link_f, y, Y_metadata=None):
         """
@@ -84,7 +92,7 @@ class Binomial(Likelihood):
         :returns: gradient of log likelihood evaluated at points inverse link of f.
         :rtype: Nx1 array
         """
-        N = Y_metadata['trials']
+        N = Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
 
         return y/inv_link_f - (N-y)/(1.-inv_link_f)
@@ -110,7 +118,7 @@ class Binomial(Likelihood):
             Will return diagonal of hessian, since every where else it is 0, as the likelihood factorizes over cases
             (the distribution for y_i depends only on inverse link of f_i not on inverse link of f_(j!=i)
         """
-        N = Y_metadata['trials']
+        N = Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
         return -y/np.square(inv_link_f) - (N-y)/np.square(1.-inv_link_f)
 
@@ -133,11 +141,30 @@ class Binomial(Likelihood):
             Will return diagonal of hessian, since every where else it is 0, as the likelihood factorizes over cases
             (the distribution for y_i depends only on inverse link of f_i not on inverse link of f_(j!=i)
         """
-        N = Y_metadata['trials']
+        N = Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
 
         inv_link_f2 = np.square(inv_link_f)
         return 2*y/inv_link_f**3 - 2*(N-y)/(1.-inv_link_f)**3
+
+    def dlogpdf_dtheta(self, f, y, Y_metadata=None):
+        if isinstance(self.gp_link, link_functions.Probit):
+            N = Y_metadata.get('trials', np.ones(y.shape))
+            inv_link_f = self.gp_link.transf(f)
+            return (y/inv_link_f - (N-y)/(1.-inv_link_f))*self.gp_link.dtransf_dtheta(f)
+        else:
+            return super(Binomial, self).dlogpdf_dtheta(f, y, Y_metadata)
+    
+    def update_gradients(self, partial, reset=True):
+        if reset:
+            self.reset_gradients()
+        if isinstance(self.gp_link, link_functions.Probit):
+            self.gp_link.update_gradients(partial, reset)
+        else:
+            raise NotImplementedError('This function call should not happen')
+
+    def reset_gradients(self):
+        self.gp_link.reset_gradients()
 
     def samples(self, gp, Y_metadata=None, **kw):
         """
@@ -148,12 +175,12 @@ class Binomial(Likelihood):
         orig_shape = gp.shape
         gp = gp.flatten()
         N = Y_metadata['trials']
-        Ysim = np.random.binomial(N, self.gp_link.transf(gp/self.nu))
+        Ysim = np.random.binomial(N, self.gp_link.transf(gp))
         return Ysim.reshape(orig_shape)
-    
-    def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None): #No hyperparameters: No gradients
+
+    def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
         pass
-      
+    
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):
         if isinstance(self.gp_link, link_functions.Probit):
 
@@ -182,7 +209,16 @@ class Binomial(Likelihood):
             raise NotImplementedError
 
     def moments_match_ep(self,obs,tau,v,Y_metadata_i=None):
-        if isinstance(self.gp_link, link_functions.Probit):
+        """
+        Calculation of moments using quadrature
+
+        :param obs: observed output
+        :param tau: cavity distribution 1st natural parameter (precision)
+        :param v: cavity distribution 2nd natural paramenter (mu*precision)
+        """
+        #Compute first integral for zeroth moment.
+        #NOTE constant np.sqrt(2*pi/tau) added at the end of the function
+        if isinstance(self.gp_link, link_functions.Probit) and (Y_metadata_i is None or int(Y_metadata_i.get('trials', 1)) == int(1)): #Special case for probit likelihood. Can be found from Riihimaki et Vehtari 2010
             nu = self.gp_link.nu
             mu = v/tau
             sigma2 = 1./tau

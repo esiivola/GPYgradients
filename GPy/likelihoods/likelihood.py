@@ -40,6 +40,7 @@ class Likelihood(Parameterized):
         self.gp_link = gp_link
         self.log_concave = False
         self.not_block_really = False
+        self.link_parameters(*[gp_link])
 
     def request_num_latent_functions(self, Y):
         """
@@ -51,12 +52,8 @@ class Likelihood(Parameterized):
 
     def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
         return np.zeros(self.size)
-    
-    def reset_gradients(self):
-        if self.size > 0:
-            raise NotImplementedError('Must be implemented for likelihoods with parameters to be optimized')
-        
-    def update_gradients(self, partial, reset=True):
+
+    def update_gradients(self, partial):
         if self.size > 0:
             raise NotImplementedError('Must be implemented for likelihoods with parameters to be optimized')
 
@@ -226,6 +223,51 @@ class Likelihood(Parameterized):
         if self.__gh_points is None:
             self.__gh_points = np.polynomial.hermite.hermgauss(T)
         return self.__gh_points
+
+    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1.):
+        if self.size > 0:
+            shape = Y.shape
+            tau,v,Y = tau.flatten(), v.flatten(),Y.flatten()
+
+            # assert Y.shape == v.shape
+            dlik_dtheta = np.empty((self.size, Y.shape[0]))
+            # for j in range(self.size):
+            for index in range(len(Y)):
+                Y_metadata_i = {}
+                if Y_metadata is not None:
+                    for key in Y_metadata.keys():
+                        Y_metadata_i[key] = Y_metadata[key][index,:]
+                val = self.site_derivatives_ep(Y[index], tau[index], v[index], Y_metadata_i)
+                dlik_dtheta[:, index] = val.ravel()
+            dlik_dtheta.reshape(self.size, shape[0], shape[1])
+            beta = 3.
+            # dL_dtheta = boost_grad * np.nanmean(dlik_dtheta, axis=1)
+            dL_dtheta = boost_grad * np.nansum(dlik_dtheta, axis=1)
+        else:
+            dL_dtheta = np.array([])
+        return dL_dtheta
+
+    def site_derivatives_ep(self,obs,tau,v,Y_metadata_i=None, gh_points=None):
+        # "calculate site derivatives E_f{dp(y_i|f_i)/dr} where r is a parameter of the likelihood term."
+        # "writing it explicitly "
+        # use them for gaussian-hermite quadrature, or gaussian-kronrod quadrature !!!
+        mu = v/tau
+        sigma2 = 1./tau
+
+        if gh_points is None:
+            gh_x, gh_w = self._gh_points(32)
+        else:
+            gh_x, gh_w = gh_points
+
+        # X = gh_x[None,:]*np.sqrt(2.*v[:,None]) + m[:,None]
+        X = gh_x[None,:]
+
+        logp = self.logpdf(X, obs, Y_metadata=Y_metadata_i)
+        dlogp_dtheta = self.dlogpdf_dtheta(X, obs, Y_metadata=Y_metadata_i)
+
+        F = np.dot(logp, gh_w)/np.sqrt(np.pi)
+        dF_dtheta_i = np.dot(dlogp_dtheta, gh_w)/np.sqrt(np.pi)
+        return dF_dtheta_i
 
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):
         """
@@ -602,6 +644,7 @@ class Likelihood(Parameterized):
         assert d2logpdf_df2_dtheta.shape[0] == self.size #num_param x f matrix or num_param x f x d x matrix, num_param x f x f or num_param x f x f x d
 
         return dlogpdf_dtheta, dlogpdf_df_dtheta, d2logpdf_df2_dtheta
+
 
     def predictive_values(self, mu, var, full_cov=False, Y_metadata=None):
         """

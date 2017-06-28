@@ -6,8 +6,11 @@ import scipy
 from ..util.univariate_Gaussian import std_norm_cdf, std_norm_pdf
 import scipy as sp
 from ..util.misc import safe_exp, safe_square, safe_cube, safe_quad, safe_three_times
+from ..core.parameterization import Parameterized
+from ..core.parameterization import Param
+from ..core.parameterization.transformations import Logexp
 
-class GPTransformation(object):
+class GPTransformation(Parameterized):
     """
     Link function class for doing non-Gaussian likelihoods approximation
 
@@ -16,9 +19,9 @@ class GPTransformation(object):
     .. note:: Y values allowed depend on the likelihood_function used
 
     """
-    def __init__(self):
-        pass
-
+    def __init__(self, name="Transformation"):
+        super(GPTransformation, self).__init__(name)
+        
     def transf(self,f):
         """
         Gaussian process tranformation function, latent space -> output space
@@ -70,9 +73,13 @@ class Probit(GPTransformation):
         g(f) = \\Phi^{-1} (mu)
 
     """
-    def __init__(self, nu = 1.0):
-        self.nu = nu        
-    
+    def __init__(self, nu=1., fixed = True, name="Probit"):
+        super(Probit, self).__init__(name)
+        self.nu = Param('nu', float(nu), Logexp())
+        if fixed:
+            self.nu.constrain_fixed(nu)
+        self.link_parameter(self.nu)
+        
     def transf(self,f):
         return std_norm_cdf(f/self.nu)
 
@@ -84,7 +91,20 @@ class Probit(GPTransformation):
 
     def d3transf_df3(self,f):
         return (safe_square(f/self.nu)-1.)*std_norm_pdf(f/self.nu)/(self.nu**3)
-
+    
+    def dtransf_dtheta(self, f):
+        return -std_norm_pdf(f/self.nu)*f/(self.nu**2)
+    
+    def update_gradients(self, gradient, reset = True):
+        if reset:
+            self.nu.gradient = gradient
+        else:
+            print(self.nu.gradient)
+            print(gradient)
+            self.nu.gradient += gradient
+    
+    def reset_gradients(self):
+        self.nu.gradient = [0]
 
 class Cloglog(GPTransformation):
     """
