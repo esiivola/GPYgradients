@@ -224,7 +224,7 @@ class Likelihood(Parameterized):
             self.__gh_points = np.polynomial.hermite.hermgauss(T)
         return self.__gh_points
 
-    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1.):
+    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
         if self.size > 0:
             shape = Y.shape
             tau,v,Y = tau.flatten(), v.flatten(),Y.flatten()
@@ -237,7 +237,7 @@ class Likelihood(Parameterized):
                 if Y_metadata is not None:
                     for key in Y_metadata.keys():
                         Y_metadata_i[key] = Y_metadata[key][index,:]
-                val = self.site_derivatives_ep(Y[index], tau[index], v[index], Y_metadata_i)
+                val = self.site_derivatives_ep(Y[index], tau[index], v[index], Y_metadata_i, dL_dKdiag = dL_dKdiag[index])
                 dlik_dtheta[:, index] = val.ravel()
             dlik_dtheta.reshape(self.size, shape[0], shape[1])
             beta = 3.
@@ -247,7 +247,7 @@ class Likelihood(Parameterized):
             dL_dtheta = np.array([])
         return dL_dtheta
 
-    def site_derivatives_ep(self,obs,tau,v,Y_metadata_i=None, gh_points=None):
+    def site_derivatives_ep(self,obs,tau,v,Y_metadata_i=None, gh_points=None, dL_dKdiag = None):
         # "calculate site derivatives E_f{dp(y_i|f_i)/dr} where r is a parameter of the likelihood term."
         # "writing it explicitly "
         # use them for gaussian-hermite quadrature, or gaussian-kronrod quadrature !!!
@@ -260,13 +260,13 @@ class Likelihood(Parameterized):
             gh_x, gh_w = gh_points
 
         # X = gh_x[None,:]*np.sqrt(2.*v[:,None]) + m[:,None]
-        X = gh_x[None,:]
+        X = gh_x[:,None] #Nx1
 
         logp = self.logpdf(X, obs, Y_metadata=Y_metadata_i)
         dlogp_dtheta = self.dlogpdf_dtheta(X, obs, Y_metadata=Y_metadata_i)
 
-        F = np.dot(logp, gh_w)/np.sqrt(np.pi)
-        dF_dtheta_i = np.dot(dlogp_dtheta, gh_w)/np.sqrt(np.pi)
+        F = np.dot(logp.flatten(), gh_w)/np.sqrt(np.pi)
+        dF_dtheta_i = np.dot(dlogp_dtheta.reshape((self.size,-1)), gh_w)/np.sqrt(np.pi)
         return dF_dtheta_i
 
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):

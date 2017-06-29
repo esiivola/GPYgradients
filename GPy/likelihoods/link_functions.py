@@ -99,8 +99,6 @@ class Probit(GPTransformation):
         if reset:
             self.nu.gradient = gradient
         else:
-            print(self.nu.gradient)
-            print(gradient)
             self.nu.gradient += gradient
     
     def reset_gradients(self):

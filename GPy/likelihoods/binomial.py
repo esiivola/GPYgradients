@@ -92,7 +92,7 @@ class Binomial(Likelihood):
         :returns: gradient of log likelihood evaluated at points inverse link of f.
         :rtype: Nx1 array
         """
-        N = Y_metadata.get('trials', np.ones(y.shape))
+        N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
 
         return y/inv_link_f - (N-y)/(1.-inv_link_f)
@@ -118,7 +118,7 @@ class Binomial(Likelihood):
             Will return diagonal of hessian, since every where else it is 0, as the likelihood factorizes over cases
             (the distribution for y_i depends only on inverse link of f_i not on inverse link of f_(j!=i)
         """
-        N = Y_metadata.get('trials', np.ones(y.shape))
+        N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
         return -y/np.square(inv_link_f) - (N-y)/np.square(1.-inv_link_f)
 
@@ -141,7 +141,7 @@ class Binomial(Likelihood):
             Will return diagonal of hessian, since every where else it is 0, as the likelihood factorizes over cases
             (the distribution for y_i depends only on inverse link of f_i not on inverse link of f_(j!=i)
         """
-        N = Y_metadata.get('trials', np.ones(y.shape))
+        N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
 
         inv_link_f2 = np.square(inv_link_f)
@@ -149,7 +149,7 @@ class Binomial(Likelihood):
 
     def dlogpdf_dtheta(self, f, y, Y_metadata=None):
         if isinstance(self.gp_link, link_functions.Probit):
-            N = Y_metadata.get('trials', np.ones(y.shape))
+            N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
             inv_link_f = self.gp_link.transf(f)
             return (y/inv_link_f - (N-y)/(1.-inv_link_f))*self.gp_link.dtransf_dtheta(f)
         else:

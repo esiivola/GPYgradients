@@ -26,6 +26,7 @@ class MixedNoise(Likelihood):
                             break
             if unique is True:
                 groups.append([i])
+        self.gp_link = None
         self.groups=groups
         self.link_parameters(*[likelihoods_list[g[0]] for g in groups])
         self.likelihoods_list = likelihoods_list
@@ -62,7 +63,6 @@ class MixedNoise(Likelihood):
         if reset:
             self.reset_gradients()
         j=0
-        print(gradients)
         for i in range(len(self.groups)):
             s = j + self.likelihoods_list[self.groups[i][0]].size
             self.likelihoods_list[self.groups[i][0]].update_gradients( gradients[j:s], False)
@@ -100,7 +100,7 @@ class MixedNoise(Likelihood):
         outputs = np.unique(ind)
         var = np.zeros( (sigma.size) )
         for j in outputs:
-            v = self.likelihoods_list[j].predictive_varaince(mu[ind==j,:],
+            v = self.likelihoods_list[j].predictive_variance(mu[ind==j,:],
                 sigma[ind==j,:],Y_metadata=None)
             var[ind==j,:] = np.hstack(v)
         return [v[:,None] for v in var.T]
@@ -139,6 +139,57 @@ class MixedNoise(Likelihood):
             _ysim = np.array([np.random.normal(lik.gp_link.transf(gpj), scale=np.sqrt(lik.variance), size=1) for gpj in gp_filtered.flatten()])
             Ysim[flt,:] = _ysim.reshape(n1,N2)
         return Ysim
+
+    def logpdf(self, f, y, Y_metadata=None):
+        ind = Y_metadata['output_index'].flatten()
+        outputs = np.unique(ind)
+        if ind.shape[0]==1:
+            ind = ind[0]*np.ones(f.shape[0])
+            y = y*np.ones(f.shape)
+        lpdf = np.zeros( (f.size))
+        for j in outputs:
+            lpdf[ind==j] = self.likelihoods_list[j].logpdf(f[ind==j,:], y[ind==j,:], Y_metadata=None)
+        return lpdf
+
+    def dlogpdf_dtheta(self, f, y, Y_metadata=None):
+        ind = Y_metadata['output_index'].flatten()
+        if ind.shape[0]==1:
+            ind = ind[0]*np.ones(f.shape[0])
+            y = y*np.ones(f.shape)
+        pdf = np.zeros((self.size, f.shape[0], f.shape[1]) )
+        j=0
+        for i in range(len(self.groups)):
+            s = j + self.likelihoods_list[self.groups[i][0]].size
+            if s > j:
+                for j in self.groups[i]:
+                    pdf[j:s,ind == j,:] = self.likelihoods_list[j].dlogpdf_dtheta(f[ind==j,:], y[ind==j,:], Y_metadata=None)
+            j=s
+        return pdf
+    
+    def site_derivatives_ep(self,obs,tau,v,Y_metadata_i=None, gh_points=None, dL_dKdiag = None):
+        # "calculate site derivatives E_f{dp(y_i|f_i)/dr} where r is a parameter of the likelihood term."
+        # "writing it explicitly "
+        # use them for gaussian-hermite quadrature, or gaussian-kronrod quadrature !!!
+        mu = v/tau
+        sigma2 = 1./tau
+
+        if gh_points is None:
+            gh_x, gh_w = self._gh_points(32)
+        else:
+            gh_x, gh_w = gh_points
+
+        # X = gh_x[None,:]*np.sqrt(2.*v[:,None]) + m[:,None]
+        X = gh_x[:,None] #Nx1
+
+        logp = self.logpdf(X, obs, Y_metadata=Y_metadata_i)
+        dlogp_dtheta = self.dlogpdf_dtheta(X, obs, Y_metadata=Y_metadata_i)
+
+        F = np.dot(logp, gh_w)/np.sqrt(np.pi)
+        dF_dtheta_i = np.dot(dlogp_dtheta.reshape((self.size,-1)), gh_w)/np.sqrt(np.pi)
+        ind = Y_metadata_i['output_index'].flatten()
+        if self.likelihoods_list[ind[0]].name is 'Gaussian_noise':
+            dF_dtheta_i[0] = dL_dKdiag
+        return dF_dtheta_i
 
     def _collide_to_groups(self, orig):
         new = []

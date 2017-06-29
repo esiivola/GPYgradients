@@ -46,8 +46,6 @@ class CombinedLikelihood(Likelihood):
         for i in range(0,nl):
             mu[i], var[i] = self.likelihoods[i].predictive_values(mu_list[i], var_list[i], full_cov, Y_metadata_list[i])
         return mu, var
-    
-  
 
     def predictive_mean(self, mu, sigma, Y_metadata):
         nl = len(self.likelihoods)
