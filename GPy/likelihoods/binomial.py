@@ -150,9 +150,11 @@ class Binomial(Likelihood):
 
     def dlogpdf_dtheta(self, f, y, Y_metadata=None):
         if isinstance(self.gp_link, link_functions.Probit):
+            dlogpdf_dtheta = np.zeros((self.size, f.shape[0], f.shape[1]))
             N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
             inv_link_f = self.gp_link.transf(f)
-            return (y/inv_link_f - (N-y)/(1.-inv_link_f))*self.gp_link.dtransf_dtheta(f)
+            dlogpdf_dtheta[0,:,:] = (y/inv_link_f - (N-y)/(1.-inv_link_f))*self.gp_link.dtransf_dtheta(f)
+            return dlogpdf_dtheta
         else:
             return super(Binomial, self).dlogpdf_dtheta(f, y, Y_metadata)
     

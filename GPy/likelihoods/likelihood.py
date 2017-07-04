@@ -248,7 +248,6 @@ class Likelihood(Parameterized):
 
             if quad_mode == 'gk':
                 f = partial(self.integrate_gk)
-                print("gk")
                 quads = zip(*map(f, Y.flatten(), mu.flatten(), np.sqrt(sigma2.flatten()), Y_metadata_list))
                 quads = np.vstack(quads)
                 quads.reshape(self.size, shape[0], shape[1])
@@ -262,6 +261,7 @@ class Likelihood(Parameterized):
             #     do a gaussian-hermite integration
             #dL_dtheta_avg = boost_grad * np.nanmean(quads, axis=1)
             #print("Y: {}, mu: {}, sigma2: {}, quads: {}".format(Y,mu,np.sqrt(sigma2.flatten()), quads))
+            quads.reshape(self.size, shape[0], shape[1])
             dL_dtheta = boost_grad * np.nansum(quads, axis=1)
             # dL_dtheta = boost_grad * np.nansum(dlik_dtheta, axis=1)
         else:
@@ -314,7 +314,6 @@ class Likelihood(Parameterized):
         fn = fn.reshape(old_shape)
 
         dF_dtheta_i = np.dot(fn, gh_w)/np.sqrt(np.pi)
-        #print(dF_dtheta_i)
         return dF_dtheta_i
 
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):

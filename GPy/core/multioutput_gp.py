@@ -82,3 +82,22 @@ class MultioutputGP(GP):
             if Y_metadata is None:
                 Y_metadata={'output_index': ind}
         return super(MultioutputGP, self).predictive_gradients(Xnew, kern)
+    
+    
+    def set_XY(self, X=None, Y=None):
+        if isinstance(X, list):
+            X, _, self.output_index  = util.multioutput.build_XY(X, None)
+        if isinstance(Y, list):
+            _, Y, self.output_index  = util.multioutput.build_XY(Y, Y)      
+                
+        self.update_model(False)
+        if Y is not None:
+            self.Y = ObsAr(Y)
+            self.Y_normalized = self.Y
+        if X is not None:
+            self.X = ObsAr(X)
+            
+        self.Y_metadata={'output_index': self.output_index}
+                
+        self.inference_method.reset()
+        self.update_model(True)
