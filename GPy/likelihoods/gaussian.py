@@ -65,7 +65,10 @@ class Gaussian(Likelihood):
 
     def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
         return dL_dKdiag.sum()
-
+    
+    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+        return self.exact_inference_gradients(dL_dKdiag, Y_metadata=Y_metadata)
+    
     def _preprocess_values(self, Y):
         """
         Check if the values of the observations correspond to the values

@@ -177,10 +177,29 @@ class Binomial(Likelihood):
         N = Y_metadata['trials']
         Ysim = np.random.binomial(N, self.gp_link.transf(gp))
         return Ysim.reshape(orig_shape)
+  
+    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+        if isinstance(self.gp_link, link_functions.Probit):
+            nu = self.gp_link.nu
+            mu = v/tau
+            sigma2 = 1./tau
+            a = np.sqrt(1 + sigma2*(nu**2))
+            z = mu/a
+            return np.sum((self.gp_link.dtransf_df(z)/self.gp_link.transf(z))*mu/(nu*(sigma2*(nu**2)+1)**(3./2.)) )
+        else:
+            return super(Binomial, self).ep_gradients(Y, tau, v, Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag=dL_dKdiag)
 
-    def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
-        pass
-    
+    def ep_gradients2(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+        if isinstance(self.gp_link, link_functions.Probit):
+            nu = self.gp_link.nu
+            mu = v/tau
+            sigma2 = 1./tau
+            a = np.sqrt(1 + sigma2/(nu**2))
+            z = mu/a
+            return -1.0*np.sum((1.0/self.gp_link.transf(z))*self.gp_link.dtransf_df(z)*nu*z/(sigma2+nu**2))
+        else:
+            return super(Binomial, self).ep_gradients(Y, tau, v, Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag=dL_dKdiag)
+  
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):
         if isinstance(self.gp_link, link_functions.Probit):
 
@@ -209,6 +228,35 @@ class Binomial(Likelihood):
             raise NotImplementedError
 
     def moments_match_ep(self,obs,tau,v,Y_metadata_i=None):
+        """
+        Calculation of moments using quadrature
+
+        :param obs: observed output
+        :param tau: cavity distribution 1st natural parameter (precision)
+        :param v: cavity distribution 2nd natural paramenter (mu*precision)
+        """
+        #Compute first integral for zeroth moment.
+        #NOTE constant np.sqrt(2*pi/tau) added at the end of the function
+        if isinstance(self.gp_link, link_functions.Probit) and (Y_metadata_i is None or int(Y_metadata_i.get('trials', 1)) == int(1)): #Special case for probit likelihood. Can be found from Riihimaki et Vehtari 2010
+            nu = self.gp_link.nu
+            mu = v/tau
+            sigma2 = 1./tau
+            a = np.sqrt(1 + sigma2*(nu**2))
+            z = obs*mu/a
+            normc_z = self.gp_link.transf(z)
+            m0 = normc_z
+            normp_z = self.gp_link.dtransf_df(z)
+            m1 = mu + (obs*sigma2*normp_z)/(normc_z*a)
+            #print('tau: {}, v: {}, nu: {}, z: {}, normc_z: {}, normp_z: {}'.format(tau, v, nu.values, z, normc_z, normp_z))
+            m2 = sigma2 - ((sigma2**2)*normp_z)/((1./(nu**2)+sigma2)*normc_z)*(z + normp_z/(nu**2)/normc_z)
+            #print("m0: {}, m1: {}, m2: {}".format(m0,m1,m2))
+            #m0a, m1a, m2a =  super(Binomial, self).moments_match_ep(obs,tau,v,Y_metadata_i)
+            #print("m0a: {}, m1a: {}, m2a: {}".format(m0a,m1a,m2a))
+            return m0, m1, m2
+        else:
+            return super(Binomial, self).moments_match_ep(obs,tau,v,Y_metadata_i)
+
+    def moments_match_ep2(self,obs,tau,v,Y_metadata_i=None):
         """
         Calculation of moments using quadrature
 

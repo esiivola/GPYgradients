@@ -59,6 +59,18 @@ class MixedNoise(Likelihood):
         for likelihood in self.likelihoods_list:
             likelihood.reset_gradients()
 
+    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+        ind = Y_metadata['output_index'].flatten()
+        grads = np.zeros((self.size) )
+        j=0
+        for i in range(len(self.groups)):
+            s = j + self.likelihoods_list[self.groups[i][0]].size
+            if s > j:
+                for k in self.groups[i]:
+                    grads[j:s] += self.likelihoods_list[k].ep_gradients(Y[ind==k,:], tau[ind==k], v[ind==k], Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag = dL_dKdiag[ind==k])
+            j=s
+        return grads   
+
     def update_gradients(self, gradients, reset=True):
         if reset:
             self.reset_gradients()
@@ -161,8 +173,8 @@ class MixedNoise(Likelihood):
         for i in range(len(self.groups)):
             s = j + self.likelihoods_list[self.groups[i][0]].size
             if s > j:
-                for j in self.groups[i]:
-                    pdf[j:s,ind == j,:] = self.likelihoods_list[j].dlogpdf_dtheta(f[ind==j,:], y[ind==j,:], Y_metadata=None)
+                for k in self.groups[i]:
+                    pdf[j:s,ind == k,:] = self.likelihoods_list[k].dlogpdf_dtheta(f[ind==k,:], y[ind==j,:], Y_metadata=None)
             j=s
         return pdf
     

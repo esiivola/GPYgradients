@@ -45,7 +45,7 @@ class gaussianApproximation(object):
             self.tau[i] = np.finfo(float).eps
             delta_tau = self.tau[i] - tau_tilde_prev
         self.v[i] += delta_v
-
+        #assert( not np.isnan(self.v[i]))
         return (delta_tau, delta_v)
 
 

@@ -38,7 +38,7 @@ class MultioutputGP(GP):
 
 
     """
-    def __init__(self, X_list, Y_list, kernel_list, likelihood_list, name='multioutputgp', kernel_cross_covariances={}):
+    def __init__(self, X_list, Y_list, kernel_list, likelihood_list, name='multioutputgp', kernel_cross_covariances={}, inference_method=None):
         #Input and Output
         X,Y,self.output_index = util.multioutput.build_XY(X_list,Y_list)
         Ny = len(Y_list)
@@ -49,7 +49,10 @@ class MultioutputGP(GP):
         assert isinstance(likelihood_list, list)
         likelihood = likelihoods.MixedNoise(likelihood_list)
         
-        super(MultioutputGP, self).__init__(X,Y,kernel,likelihood, Y_metadata={'output_index':self.output_index}, inference_method = expectation_propagation.EP())# expectation_propagation.MultioutputEP()) # expectation_propagation.EP())                             
+        if inference_method is None:
+            inference_method = expectation_propagation.EP() 
+        
+        super(MultioutputGP, self).__init__(X,Y,kernel,likelihood, Y_metadata={'output_index':self.output_index}, inference_method = inference_method)# expectation_propagation.MultioutputEP()) # expectation_propagation.EP())                             
                                             #expectation_propagation.MultioutputEP())
 
     def predict_noiseless(self,  Xnew, full_cov=False, Y_metadata=None, kern=None):

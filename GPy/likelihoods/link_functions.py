@@ -8,7 +8,27 @@ import scipy as sp
 from ..util.misc import safe_exp, safe_square, safe_cube, safe_quad, safe_three_times
 from ..core.parameterization import Parameterized
 from ..core.parameterization import Param
-from ..core.parameterization.transformations import Logexp
+from ..core.parameterization.transformations import Logexp, Transformation, Logistic
+
+class SigmoidalInverse(Transformation):
+    def f(self, x):
+        return 2./(1.+np.exp(-1./x))-1.
+    
+    def finv(self, x):
+        return -1./np.log(2./(x+1.)-1)
+    
+    def gradfactor(self, f, df):
+        finv = self.finv(f);
+        return -2.*df/((1+np.exp(-1./finv))**2)*np.exp(-1./finv)/(finv**2)
+    
+    def initialize(self,f):
+        if any(f == 0):
+            print("Warning: changing parameters to satisfy constraints")
+        f[f==0] = np.finfo(float).eps
+        return f
+        
+    def __str__(self):
+        return 'sinv'
 
 class GPTransformation(Parameterized):
     """
@@ -65,8 +85,45 @@ class Identity(GPTransformation):
     def d3transf_df3(self,f):
         return np.zeros_like(f)
 
-
 class Probit(GPTransformation):
+    """
+    .. math::
+
+        g(f) = \\Phi^{-1} (mu)
+
+    """
+    def __init__(self, nu=1., fixed = True, name="Probit"):
+        super(Probit, self).__init__(name)
+        self.nu = Param('nu', float(nu), Logistic(-10,10))
+        if fixed:
+            self.nu.constrain_fixed(nu)
+        self.link_parameter(self.nu)
+        
+    def transf(self,f):
+        return std_norm_cdf(f*self.nu)
+
+    def dtransf_df(self,f):
+        return std_norm_pdf(f*self.nu)*self.nu
+
+    def d2transf_df2(self,f):
+        return -(f*self.nu) * std_norm_pdf(f*self.nu)*(self.nu**2)
+
+    def d3transf_df3(self,f):
+        return (safe_square(f*self.nu)-1.)*std_norm_pdf(f*self.nu)*(self.nu**3)
+    
+    def dtransf_dtheta(self, f):
+        return std_norm_pdf(f*self.nu)*f
+    
+    def update_gradients(self, gradient, reset = True):
+        if reset:
+            self.nu.gradient = gradient
+        else:
+            self.nu.gradient += gradient
+    
+    def reset_gradients(self):
+        self.nu.gradient = [0]
+
+class Probit2(GPTransformation):
     """
     .. math::
 
