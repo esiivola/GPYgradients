@@ -6,8 +6,12 @@ from scipy import stats,special
 import scipy as sp
 from . import link_functions
 from ..util.misc import chain_1, chain_2, chain_3, blockify_dhess_dtheta, blockify_third, blockify_hessian, safe_exp
+from ..util.quad_integrate import quadgk_int
 from scipy.integrate import quad
+from functools import partial
+
 import warnings
+
 from ..core.parameterization import Parameterized
 
 class Likelihood(Parameterized):
@@ -224,49 +228,93 @@ class Likelihood(Parameterized):
             self.__gh_points = np.polynomial.hermite.hermgauss(T)
         return self.__gh_points
 
-    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+    def ep_gradients(self, Y, cav_tau, cav_v, dL_dKdiag, Y_metadata=None, quad_mode='gk', boost_grad=1.):
         if self.size > 0:
             shape = Y.shape
-            tau,v,Y = tau.flatten(), v.flatten(),Y.flatten()
+            tau,v,Y = cav_tau.flatten(), cav_v.flatten(),Y.flatten()
+            mu = v/tau
+            sigma2 = 1./tau
 
             # assert Y.shape == v.shape
             dlik_dtheta = np.empty((self.size, Y.shape[0]))
             # for j in range(self.size):
+            Y_metadata_list = []
             for index in range(len(Y)):
                 Y_metadata_i = {}
                 if Y_metadata is not None:
                     for key in Y_metadata.keys():
                         Y_metadata_i[key] = Y_metadata[key][index,:]
-                val = self.site_derivatives_ep(Y[index], tau[index], v[index], Y_metadata_i, dL_dKdiag = dL_dKdiag[index])
-                dlik_dtheta[:, index] = val.ravel()
-            dlik_dtheta.reshape(self.size, shape[0], shape[1])
-            beta = 3.
-            # dL_dtheta = boost_grad * np.nanmean(dlik_dtheta, axis=1)
-            dL_dtheta = boost_grad * np.nansum(dlik_dtheta, axis=1)
+                    Y_metadata_list.append(Y_metadata_i)
+
+            if quad_mode == 'gk':
+                f = partial(self.integrate_gk)
+                print("gk")
+                quads = zip(*map(f, Y.flatten(), mu.flatten(), np.sqrt(sigma2.flatten()), Y_metadata_list))
+                quads = np.vstack(quads)
+                quads.reshape(self.size, shape[0], shape[1])
+            elif quad_mode == 'gh':
+                f = partial(self.integrate_gh)
+                quads = zip(*map(f, Y.flatten(), mu.flatten(), np.sqrt(sigma2.flatten())))
+                quads = np.hstack(quads)
+                quads = quads.T
+            else:
+                raise Exception("no other quadrature mode available")
+            #     do a gaussian-hermite integration
+            #dL_dtheta_avg = boost_grad * np.nanmean(quads, axis=1)
+            #print("Y: {}, mu: {}, sigma2: {}, quads: {}".format(Y,mu,np.sqrt(sigma2.flatten()), quads))
+            dL_dtheta = boost_grad * np.nansum(quads, axis=1)
+            # dL_dtheta = boost_grad * np.nansum(dlik_dtheta, axis=1)
         else:
-            dL_dtheta = np.array([])
+            dL_dtheta = np.zeros(self.num_params)
         return dL_dtheta
 
-    def site_derivatives_ep(self,obs,tau,v,Y_metadata_i=None, gh_points=None, dL_dKdiag = None):
-        # "calculate site derivatives E_f{dp(y_i|f_i)/dr} where r is a parameter of the likelihood term."
-        # "writing it explicitly "
-        # use them for gaussian-hermite quadrature, or gaussian-kronrod quadrature !!!
-        mu = v/tau
-        sigma2 = 1./tau
 
+    def integrate_gk(self, Y, mu, sigma, Y_metadata_i=None):
+        # gaussian-kronrod integration.
+        fmin = -np.inf
+        fmax = np.inf
+        SQRT_2PI = np.sqrt(2.*np.pi)
+        def generate_integral(f):
+            a = np.exp(self.logpdf_link(f, Y, Y_metadata_i)) * np.exp(-0.5 * np.square((f - mu) / sigma)) / (
+                SQRT_2PI * sigma)
+            fn1 = a * self.dlogpdf_dtheta(f, Y, Y_metadata_i)
+            fn = fn1
+            return fn
+
+        dF_dtheta_i = quadgk_int(generate_integral, fmin=fmin, fmax=fmax)
+        return dF_dtheta_i
+
+    def integrate_gh(self, Y, mu, sigma, Y_metadata_i=None, gh_points=None):
+        # gaussian-hermite quadrature.
+        # "calculate site derivatives E_f{d logp(y_i|f_i)/da} where a is a likelihood parameter
+        # and the expectation is over the exact marginal posterior, which is not gaussian- and is
+        # unnormalised product of the cavity distribution(a Gaussian) and the exact likelihood term.
+        #
+        # calculate the expectation wrt the approximate marginal posterior, which should be approximately the same.
+        # . This term is needed for evaluating the
+        # gradients of the marginal likelihood estimate Z_EP wrt likelihood parameters."
+        # "writing it explicitly "
+        # use them for gaussian-hermite quadrature
+        #print("Y: {}, mu: {}, sigma2: {}".format(Y,mu,sigma))
+        SQRT_2PI = np.sqrt(2.*np.pi)
         if gh_points is None:
             gh_x, gh_w = self._gh_points(32)
         else:
             gh_x, gh_w = gh_points
 
-        # X = gh_x[None,:]*np.sqrt(2.*v[:,None]) + m[:,None]
-        X = gh_x[:,None] #Nx1
+        X = gh_x[None,:]*np.sqrt(2.)*sigma + mu
 
-        logp = self.logpdf(X, obs, Y_metadata=Y_metadata_i)
-        dlogp_dtheta = self.dlogpdf_dtheta(X, obs, Y_metadata=Y_metadata_i)
+        # Here X is a grid vector of possible fi values, while Y is just a single value which will be broadcasted.
+        #a = np.exp(self.logpdf_link(X, Y, Y_metadata_i))
+        a = np.exp(self.logpdf(X, Y, Y_metadata_i))
+        a = a.repeat(self.num_params,0)
+        b = self.dlogpdf_dtheta(X, Y, Y_metadata_i)
+        old_shape = b.shape
+        fn = np.array([i*j for i,j in zip(a.flatten(), b.flatten())])
+        fn = fn.reshape(old_shape)
 
-        F = np.dot(logp.flatten(), gh_w)/np.sqrt(np.pi)
-        dF_dtheta_i = np.dot(dlogp_dtheta.reshape((self.size,-1)), gh_w)/np.sqrt(np.pi)
+        dF_dtheta_i = np.dot(fn, gh_w)/np.sqrt(np.pi)
+        #print(dF_dtheta_i)
         return dF_dtheta_i
 
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):
@@ -644,7 +692,6 @@ class Likelihood(Parameterized):
         assert d2logpdf_df2_dtheta.shape[0] == self.size #num_param x f matrix or num_param x f x d x matrix, num_param x f x f or num_param x f x f x d
 
         return dlogpdf_dtheta, dlogpdf_df_dtheta, d2logpdf_df2_dtheta
-
 
     def predictive_values(self, mu, var, full_cov=False, Y_metadata=None):
         """

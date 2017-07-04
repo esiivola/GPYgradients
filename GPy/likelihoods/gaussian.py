@@ -53,7 +53,7 @@ class Gaussian(Likelihood):
 
     def gaussian_variance(self, Y_metadata=None):
         return self.variance
-    
+
     def reset_gradients(self):
         self.variance.gradient = 0
     
@@ -63,12 +63,12 @@ class Gaussian(Likelihood):
         else:
             self.variance.gradient += grad
 
-    def exact_inference_gradients(self, dL_dKdiag,Y_metadata=None):
+#    def ep_gradients(self, Y, cav_tau, cav_v, dL_dKdiag, Y_metadata=None, quad_mode='gk', boost_grad=1.):
+#        return self.exact_inference_gradients(dL_dKdiag)
+
+    def exact_inference_gradients(self, dL_dKdiag, Y_metadata=None):
         return dL_dKdiag.sum()
-    
-    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
-        return self.exact_inference_gradients(dL_dKdiag, Y_metadata=Y_metadata)
-    
+
     def _preprocess_values(self, Y):
         """
         Check if the values of the observations correspond to the values

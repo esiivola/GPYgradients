@@ -59,7 +59,7 @@ class MixedNoise(Likelihood):
         for likelihood in self.likelihoods_list:
             likelihood.reset_gradients()
 
-    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+    def ep_gradients(self, Y, cav_tau, cav_v, dL_dKdiag, Y_metadata=None, quad_mode='gk', boost_grad=1.):
         ind = Y_metadata['output_index'].flatten()
         grads = np.zeros((self.size) )
         j=0
@@ -67,7 +67,8 @@ class MixedNoise(Likelihood):
             s = j + self.likelihoods_list[self.groups[i][0]].size
             if s > j:
                 for k in self.groups[i]:
-                    grads[j:s] += self.likelihoods_list[k].ep_gradients(Y[ind==k,:], tau[ind==k], v[ind==k], Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag = dL_dKdiag[ind==k])
+                    temp = self.likelihoods_list[k].ep_gradients(Y[ind==k,:], cav_tau[ind==k], cav_v[ind==k], dL_dKdiag = dL_dKdiag[ind==k], Y_metadata=Y_metadata, quad_mode=quad_mode, boost_grad=boost_grad)
+                    grads[j:s] += self.likelihoods_list[k].ep_gradients(Y[ind==k,:], cav_tau[ind==k], cav_v[ind==k], dL_dKdiag = dL_dKdiag[ind==k], Y_metadata=Y_metadata, quad_mode=quad_mode, boost_grad=boost_grad)
             j=s
         return grads   
 

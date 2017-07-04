@@ -24,7 +24,7 @@ class Binomial(Likelihood):
     def __init__(self, gp_link=None):
         if gp_link is None:
             gp_link = link_functions.Probit()
-
+        
         super(Binomial, self).__init__(gp_link, 'Binomial')
 
     def pdf_link(self, inv_link_f, y, Y_metadata):
@@ -62,6 +62,7 @@ class Binomial(Likelihood):
         :returns: log likelihood evaluated at points inverse link of f.
         :rtype: float
         """
+        inv_link_f[inv_link_f <= 0] = 0.00000001
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
 
@@ -178,16 +179,16 @@ class Binomial(Likelihood):
         Ysim = np.random.binomial(N, self.gp_link.transf(gp))
         return Ysim.reshape(orig_shape)
   
-    def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
-        if isinstance(self.gp_link, link_functions.Probit):
-            nu = self.gp_link.nu
-            mu = v/tau
-            sigma2 = 1./tau
-            a = np.sqrt(1 + sigma2*(nu**2))
-            z = mu/a
-            return np.sum((self.gp_link.dtransf_df(z)/self.gp_link.transf(z))*mu/(nu*(sigma2*(nu**2)+1)**(3./2.)) )
-        else:
-            return super(Binomial, self).ep_gradients(Y, tau, v, Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag=dL_dKdiag)
+    #def ep_gradients(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+        #if isinstance(self.gp_link, link_functions.Probit):
+            #nu = self.gp_link.nu
+            #mu = v/tau
+            #sigma2 = 1./tau
+            #a = np.sqrt(1 + sigma2*(nu**2))
+            #z = mu/a
+            #return np.sum((self.gp_link.dtransf_df(z)/self.gp_link.transf(z))*mu/(nu*(sigma2*(nu**2)+1)**(3./2.)) )
+        #else:
+            #return super(Binomial, self).ep_gradients(Y, tau, v, Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag=dL_dKdiag)
 
     def ep_gradients2(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
         if isinstance(self.gp_link, link_functions.Probit):
@@ -283,3 +284,13 @@ class Binomial(Likelihood):
             return m0, m1, m2
         else:
             return super(Binomial, self).moments_match_ep(obs,tau,v,Y_metadata_i)
+    
+    ##only compute gh points if required
+    #__gh_points = None
+    #def _gh_points(self, T=20):
+        #points, w = super(Binomial, self)._gh_points(T=T)
+        #minp = min(points)-10*np.finfo(float).eps
+        #maxp = max(points)+10*np.finfo(float).eps
+        #points = (points + minp)/(maxp-minp)
+        #print(points)
+        #return points, w
