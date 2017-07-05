@@ -295,8 +295,9 @@ class EP(EPBase, ExactGaussianInference):
 
         dL_dK = 0.5 * (tdot(alpha) - Wi)
         dL_dthetaL = likelihood.ep_gradients(Y, cav_params.tau, cav_params.v, np.diag(dL_dK), Y_metadata=Y_metadata, quad_mode='gh')
-        temp = likelihood.exact_inference_gradients(np.diag(dL_dK), Y_metadata = Y_metadata)
-        print("exact: {}, approx: {}, Ztilde: {}".format(temp, dL_dthetaL, np.exp(Z_tilde)))
+        #temp2 = likelihood.ep_gradients(Y, cav_params.tau, cav_params.v, np.diag(dL_dK), Y_metadata=Y_metadata, quad_mode='naive')
+        #temp = likelihood.exact_inference_gradients(np.diag(dL_dK), Y_metadata = Y_metadata)
+        #print("exact: {}, approx: {}, Ztilde: {}, naive: {}".format(temp, dL_dthetaL, Z_tilde, temp2))
         return Posterior(woodbury_inv=Wi, woodbury_vector=alpha, K=K), log_marginal, {'dL_dK':dL_dK, 'dL_dthetaL':dL_dthetaL, 'dL_dm':alpha}
 
 

@@ -256,6 +256,11 @@ class Likelihood(Parameterized):
                 quads = zip(*map(f, Y.flatten(), mu.flatten(), np.sqrt(sigma2.flatten())))
                 quads = np.hstack(quads)
                 quads = quads.T
+            elif quad_mode == 'naive':
+                f = partial(self.integrate_naive)
+                quads = zip(*map(f, Y.flatten(), mu.flatten(), np.sqrt(sigma2.flatten())))
+                quads = np.hstack(quads)
+                quads = quads.T
             else:
                 raise Exception("no other quadrature mode available")
             #     do a gaussian-hermite integration
@@ -316,6 +321,19 @@ class Likelihood(Parameterized):
 
         dF_dtheta_i = np.dot(fn, gh_w)/np.sqrt(np.pi)
         return dF_dtheta_i
+
+    def integrate_naive(self, Y, mu, sigma, Y_metadata_i=None):
+        x = np.linspace(mu-30*sigma, mu+30*sigma, 1000)
+        X = x[:,None]
+        a = self.pdf(X, Y, Y_metadata_i)
+        a = a.repeat(self.num_params,0)
+        b = self.dlogpdf_dtheta(X, Y, Y_metadata_i)
+        old_shape = b.shape
+        c = sp.stats.norm.pdf(x, mu, sigma)
+        
+        fn = np.array([i*j*k for i,j,k in zip(a.flatten(), b.flatten(), c.flatten())])
+        #print("Y: {}, mu: {}, sigma: {}".format(Y, mu, sigma))
+        return np.array([[np.sum(fn)*(X[1,0]-X[0,0])]])
 
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):
         """

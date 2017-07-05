@@ -66,11 +66,58 @@ class Add(CombinationKernel):
             which_parts = [which_parts]
         return reduce(np.add, (p.Kdiag(X) for p in which_parts))
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
-        [p.update_gradients_full(dL_dK, X, X2) for p in self.parts if not p.is_fixed]
+    @Cache_this(limit=3, force_kwargs=['which_parts'])
+    def dK_dX(self, X, X2, which_parts=None):
+        if which_parts is None:
+            which_parts = self.parts
+        elif not isinstance(which_parts, (list, tuple)):
+            # if only one part is given
+            which_parts = [which_parts]
+        return reduce(np.add, (p.dK_dX(X, X2) for p in which_parts))
 
-    def update_gradients_diag(self, dL_dK, X):
-        [p.update_gradients_diag(dL_dK, X) for p in self.parts]
+    @Cache_this(limit=3, force_kwargs=['which_parts'])
+    def dK_dX2(self, X, X2, which_parts=None):
+        if which_parts is None:
+            which_parts = self.parts
+        elif not isinstance(which_parts, (list, tuple)):
+            # if only one part is given
+            which_parts = [which_parts]
+        return reduce(np.add, (p.dK_dX2(X, X2) for p in which_parts))
+ 
+    @Cache_this(limit=3, force_kwargs=['which_parts'])
+    def dK2_dXdX2(self, X, X2, which_parts=None):
+        if which_parts is None:
+            which_parts = self.parts
+        elif not isinstance(which_parts, (list, tuple)):
+            # if only one part is given
+            which_parts = [which_parts]
+        return reduce(np.add, (p.dK2_dXdX2(X, X2) for p in which_parts))
+
+    def dgradients_dX(self, X, X2):
+        return list(itertools.chain(*[p.dgradients_dX(X, X2) for p in self.parts]))
+
+    def dgradients_dX2(self, X, X2):
+        return list(itertools.chain(*[p.dgradients_dX2(X, X2) for p in self.parts]))
+
+    def dgradients2_dXdX2(self, X, X2):
+        return list(itertools.chain(*[p.dgradients2_dXdX2(X, X2) for p in self.parts]))
+ 
+    def reset_gradients(self):
+        [p.reset_gradients() for p in self.parts]
+            
+    def update_gradients_direct(self, gradients, reset=True):
+        s=0
+        for i in range(len(self.parts)):
+           k=s+self.parts[i].size
+           if k > s:
+               self.parts[i].update_gradients_direct(gradients[s:k], reset=reset)
+           s=k
+
+    def update_gradients_full(self, dL_dK, X, X2=None, reset=True):
+        [p.update_gradients_full(dL_dK, X, X2, reset=reset) for p in self.parts if not p.is_fixed]
+
+    def update_gradients_diag(self, dL_dK, X, reset=True):
+        [p.update_gradients_diag(dL_dK, X, reset=reset) for p in self.parts if not p.is_fixed]
 
     def gradients_X(self, dL_dK, X, X2=None):
         """Compute the gradient of the objective function with respect to X.

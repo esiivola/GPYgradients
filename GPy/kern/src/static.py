@@ -30,6 +30,33 @@ class Static(Kern):
             X2 = X
         return np.zeros((X.shape[0], X2.shape[0], X.shape[1], X.shape[1]), dtype=np.float64)
 
+    def dK_dX(self, X, X2):
+        return np.zeros(self.input_dim, X.shape[0], X2.shape[0])
+
+    def dK_dX2(self, X, X2):
+        return self.dK_dX(X, X2) 
+ 
+    def dK2_dXdX2(self, X, X2):
+        return np.zeros(self.input_dim, self.input_dim, X.shape[0], X2.shape[0])
+
+    def dgradients_dX(self, X, X2):
+        return np.zeros(self.input_dim, X.shape[0], X2.shape[0])
+
+    def dgradients_dX2(self, X, X2):
+        return np.zeros(self.input_dim, X.shape[0], X2.shape[0])
+
+    def dgradients2_dXdX2(self, X, X2):
+        return np.zeros(self.input_dim, self.input_dim, X.shape[0], X2.shape[0]) 
+ 
+    def reset_gradients(self):
+        self.variance.gradient = 0.
+            
+    def update_gradients_direct(self, gradients, reset=True):
+        if reset:
+            self.variance.gradient = gradients
+        else:
+            self.variance.gradient += gradients
+
     def gradients_XX_diag(self, dL_dKdiag, X, cov=False):
         return np.zeros((X.shape[0], X.shape[1], X.shape[1]), dtype=np.float64)
 
@@ -137,11 +164,13 @@ class Bias(Static):
         shape = (X.shape[0], X.shape[0] if X2 is None else X2.shape[0])
         return np.full(shape, self.variance, dtype=np.float64)
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
-        self.variance.gradient = dL_dK.sum()
+    def update_gradients_full(self, dL_dK, X, X2=None, reset=True):
+        if reset: self.reset_gradients()
+        self.variance.gradient += dL_dK.sum()
 
-    def update_gradients_diag(self, dL_dKdiag, X):
-        self.variance.gradient = dL_dKdiag.sum()
+    def update_gradients_diag(self, dL_dKdiag, X, reset=True):
+        if reset: self.reset_gradients()
+        self.variance.gradient += dL_dKdiag.sum()
 
     def psi2(self, Z, variational_posterior):
         return np.full((Z.shape[0], Z.shape[0]), self.variance*self.variance*variational_posterior.shape[0], dtype=np.float64)
