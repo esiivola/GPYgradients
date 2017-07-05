@@ -45,7 +45,9 @@ class Binomial(Likelihood):
         .. Note:
             Each y_i must be in {0, 1}
         """
-        return np.exp(self.logpdf_link(inv_link_f, y, Y_metadata))
+        #return np.exp(self.logpdf_link(inv_link_f, y, Y_metadata))
+        N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
+        return ((inv_link_f)**(y))*((1-inv_link_f)**(N-y))
 
     def logpdf_link(self, inv_link_f, y, Y_metadata=None):
         """
@@ -62,7 +64,7 @@ class Binomial(Likelihood):
         :returns: log likelihood evaluated at points inverse link of f.
         :rtype: float
         """
-        inv_link_f[inv_link_f <= 0] = 0.00000001
+        print("inv_link_f: {}, y: {}".format(inv_link_f, y))
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
 

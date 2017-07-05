@@ -306,7 +306,8 @@ class Likelihood(Parameterized):
 
         # Here X is a grid vector of possible fi values, while Y is just a single value which will be broadcasted.
         #a = np.exp(self.logpdf_link(X, Y, Y_metadata_i))
-        a = np.exp(self.logpdf(X, Y, Y_metadata_i))
+        #a = np.exp(self.logpdf(X, Y, Y_metadata_i))
+        a = self.pdf(X, Y, Y_metadata_i)
         a = a.repeat(self.num_params,0)
         b = self.dlogpdf_dtheta(X, Y, Y_metadata_i)
         old_shape = b.shape
@@ -508,6 +509,27 @@ class Likelihood(Parameterized):
         be computed more efficiently
         """
         return np.sum(self.logpdf(f, y, Y_metadata=Y_metadata))
+
+    def pdf(self, f, y, Y_metadata=None):
+        """
+        Evaluates the link function link(f) then computes the log likelihood (pdf) using it
+
+        .. math:
+            \ p(y|\\lambda(f))
+
+        :param f: latent variables f
+        :type f: Nx1 array
+        :param y: data
+        :type y: Nx1 array
+        :param Y_metadata: Y_metadata which is not used in student t distribution - not used
+        :returns: log likelihood evaluated for this point
+        :rtype: float
+        """
+        if isinstance(self.gp_link, link_functions.Identity):
+            return np.exp(self.logpdf_link(f, y, Y_metadata=Y_metadata))
+        else:
+            inv_link_f = self.gp_link.transf(f)
+            return np.exp(self.logpdf_link(inv_link_f, y, Y_metadata=Y_metadata))
 
     def logpdf(self, f, y, Y_metadata=None):
         """
