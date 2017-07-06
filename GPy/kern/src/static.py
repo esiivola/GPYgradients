@@ -31,22 +31,22 @@ class Static(Kern):
         return np.zeros((X.shape[0], X2.shape[0], X.shape[1], X.shape[1]), dtype=np.float64)
 
     def dK_dX(self, X, X2):
-        return np.zeros(self.input_dim, X.shape[0], X2.shape[0])
+        return np.zeros((self.input_dim, X.shape[0], X2.shape[0]), dtype=np.float64)
 
     def dK_dX2(self, X, X2):
         return self.dK_dX(X, X2) 
  
     def dK2_dXdX2(self, X, X2):
-        return np.zeros(self.input_dim, self.input_dim, X.shape[0], X2.shape[0])
+        return np.zeros((self.input_dim, self.input_dim, X.shape[0], X2.shape[0]), dtype=np.float64)
 
     def dgradients_dX(self, X, X2):
-        return np.zeros(self.input_dim, X.shape[0], X2.shape[0])
+        return [np.zeros((self.input_dim, X.shape[0], X2.shape[0]), dtype=np.float64)]
 
     def dgradients_dX2(self, X, X2):
-        return np.zeros(self.input_dim, X.shape[0], X2.shape[0])
+        return [np.zeros((self.input_dim, X.shape[0], X2.shape[0]), dtype=np.float64)]
 
     def dgradients2_dXdX2(self, X, X2):
-        return np.zeros(self.input_dim, self.input_dim, X.shape[0], X2.shape[0]) 
+        return [np.zeros((self.input_dim, self.input_dim, X.shape[0], X2.shape[0]), dtype=np.float64)]
  
     def reset_gradients(self):
         self.variance.gradient = 0.

@@ -86,7 +86,7 @@ class Gaussian(Likelihood):
         """
         sigma2_hat = 1./(1./self.variance + tau_i)
         mu_hat = sigma2_hat*(data_i/self.variance + v_i)
-        sum_var = self.variance + 1./tau_i
+        sum_var = max(self.variance + 1./tau_i, 1e-20)
         Z_hat = 1./np.sqrt(2.*np.pi*sum_var)*np.exp(-.5*(data_i - v_i/tau_i)**2./sum_var)
         return Z_hat, mu_hat, sigma2_hat
 

@@ -302,7 +302,7 @@ class Stationary(Kern):
         if not self.ARD:
             g2 = [g2]
         else:
-            g2 = [g2[i,:,:,:] for i in xrange(0,self.input_dim)]
+            g2 = [g2[i,:,:,:] for i in range(0,self.input_dim)]
         return list(itertools.chain(*[g1, g2]))
 
     def dgradients_dX2(self, X, X2):
@@ -311,7 +311,7 @@ class Stationary(Kern):
         if not self.ARD:
             g2 = [g2]
         else:
-            g2 = [g2[i,:,:,:] for i in xrange(0,self.input_dim)]
+            g2 = [g2[i,:,:,:] for i in range(0,self.input_dim)]
         return list(itertools.chain(*[g1, g2]))
 
     def dgradients2_dXdX2(self, X, X2):
@@ -320,7 +320,7 @@ class Stationary(Kern):
         if not self.ARD:
             g2 = [g2]
         else:
-            g2 = [g2[i,:,:,:,:] for i in xrange(0,self.input_dim)]
+            g2 = [g2[i,:,:,:,:] for i in range(0,self.input_dim)]
         return list(itertools.chain(*[[g1], g2]))
 
     def _unscaled_dist(self, X, X2=None):
