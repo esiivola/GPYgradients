@@ -67,7 +67,6 @@ class MixedNoise(Likelihood):
             s = j + self.likelihoods_list[self.groups[i][0]].size
             if s > j:
                 for k in self.groups[i]:
-                    temp = self.likelihoods_list[k].ep_gradients(Y[ind==k,:], cav_tau[ind==k], cav_v[ind==k], dL_dKdiag = dL_dKdiag[ind==k], Y_metadata=Y_metadata, quad_mode=quad_mode, boost_grad=boost_grad)
                     grads[j:s] += self.likelihoods_list[k].ep_gradients(Y[ind==k,:], cav_tau[ind==k], cav_v[ind==k], dL_dKdiag = dL_dKdiag[ind==k], Y_metadata=Y_metadata, quad_mode=quad_mode, boost_grad=boost_grad)
             j=s
         return grads   

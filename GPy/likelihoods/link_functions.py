@@ -94,7 +94,7 @@ class Probit(GPTransformation):
     """
     def __init__(self, nu=1., fixed = True, name="Probit"):
         super(Probit, self).__init__(name)
-        self.nu = Param('nu', float(nu), Logistic(-10,10))
+        self.nu = Param('nu', float(nu), Logistic(-1e5,1e5))
         if fixed:
             self.nu.constrain_fixed(nu)
         self.link_parameter(self.nu)

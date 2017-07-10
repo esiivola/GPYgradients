@@ -49,6 +49,72 @@ class Binomial(Likelihood):
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         return ((inv_link_f)**(y))*((1-inv_link_f)**(N-y))
 
+    def ep_gradients(self, Y, cav_tau, cav_v, dL_dKdiag, Y_metadata=None, quad_mode='gk', boost_grad=1.):
+        nu = self.gp_link.nu
+        
+        nuold = nu
+        
+        mu = cav_v/cav_tau
+        sigma2 = 1./cav_tau
+        z = mu*nu/(np.sqrt(sigma2*(nu**2) + 1.))
+        dz_dnu = mu/((sigma2*(nu**2) + 1.)**(3./2.))
+        N = std_norm_pdf(z)
+        P = std_norm_cdf(z)
+        P[P<1e-20] = 1e-20 # for robustness
+        N[N<1e-20] = 1e-20
+        dN_dz = -std_norm_pdf(z)*z
+        dP_dz = std_norm_pdf(z)
+        dN_dnu = dN_dz*dz_dnu
+        dP_dnu = dP_dz*dz_dnu
+        mutilde = mu + sigma2*N*nu/(P*np.sqrt(1+sigma2*(nu**2)))
+        sigma2tilde = sigma2 - (sigma2**2)*N*(z+N/P)/(P*(sigma2 + 1./(nu**2)))
+        sigma2tilde2 = sigma2tilde
+        dmutilde_dnu = -(sigma2**2 * nu**2 * N )/( ((sigma2*nu**2 + 1.)**(3./2.)) * P ) + (sigma2 * nu * dN_dnu)/( P * np.sqrt(sigma2 * nu**2 +1.)) - (sigma2*nu*N*dP_dnu)/(P**2 * np.sqrt(sigma2 * nu**2 +1.)) + (sigma2*N)/(P*np.sqrt(sigma2 * nu**2 +1.))
+        
+        dsigma2tilde_dnu = - (sigma2**2 * N * (dN_dnu/P -N*dP_dnu/(P**2) + dz_dnu))/(P*(sigma2+1./(nu**2))) - (sigma2**2 * dN_dnu * (N/P + z))/(P*(sigma2+1./(nu**2))) + (sigma2**2 * N * dP_dnu * (N/P +z))/(P**2 *(sigma2+1./(nu**2))) - 2. * sigma2**2 * N * ( N/P + z) / (nu**3 * P * (sigma2 + 1./(nu**2))**2)
+        
+        t2 =(mu-mutilde)**2 /(2*(sigma2+sigma2tilde))
+        t3 = np.log(P)
+        t4 = 0.5*np.log(sigma2+sigma2tilde)
+        
+        term1 = dL_dKdiag*dsigma2tilde_dnu
+        term2 = (mutilde-mu)*(2.*dmutilde_dnu*(sigma2 + sigma2tilde)-(mutilde-mu)*dsigma2tilde_dnu)/(2.*(sigma2 + sigma2tilde)**2)
+        term3 = dP_dnu/P
+        term4 = 0.5/(sigma2+sigma2tilde)*dsigma2tilde_dnu
+    
+        #delta = 0.0001
+        #nu = nu+delta
+        
+        #z = mu*nu/(np.sqrt(sigma2*(nu**2) + 1.))
+        #dz_dnu = mu/((sigma2*(nu**2) + 1.)**(3./2.))
+        #N = std_norm_pdf(z)
+        #P = std_norm_cdf(z)
+        #P[P<1e-20] = 1e-20 # for robustness
+        #N[N<1e-20] = 1e-20
+        #dN_dz = -std_norm_pdf(z)*z
+        #dP_dz = std_norm_pdf(z)
+        #dN_dnu = dN_dz*dz_dnu
+        #dP_dnu = dP_dz*dz_dnu
+        #mutilde = mu + sigma2*N*nu/(P*np.sqrt(1+sigma2*(nu**2)))
+        #sigma2tilde = sigma2 - (sigma2**2)*N*(z+N/P)/(P*(sigma2 + 1./(nu**2)))
+        #dmutilde_dnu = -(sigma2**2 * nu**2 * N )/( ((sigma2*nu**2 + 1.)**(3./2.)) * P ) + (sigma2 * nu * dN_dnu)/( P * np.sqrt(sigma2 * nu**2 +1.)) - (sigma2*nu*N*dP_dnu)/(P**2 * np.sqrt(sigma2 * nu**2 +1.)) + (sigma2*N)/(P*np.sqrt(sigma2 * nu**2 +1.))
+        
+        #dsigma2tilde_dnu = - (sigma2**2 * N * (dN_dnu/P -N*dP_dnu/(P**2) + dz_dnu))/(P*(sigma2+1./(nu**2))) - (sigma2**2 * dN_dnu * (N/P + z))/(P*(sigma2+1./(nu**2))) + (sigma2**2 * N * dP_dnu * (N/P +z))/(P**2 *(sigma2+1./(nu**2))) - 2. * sigma2**2 * N * ( N/P + z) / (nu**3 * P * (sigma2 + 1./(nu**2))**2)
+        
+        #t22=(mu-mutilde)**2 /(2*(sigma2+sigma2tilde))
+        #t32 = np.log(P)
+        #t42 = 0.5*np.log(sigma2+sigma2tilde)
+        #print("NEW ITERATION: nu {}".format(nu))
+        #grad = (sigma2tilde-sigma2tilde2)/delta
+        #print("sigma2tilde is: {}, should be: {}".format(grad.sum(), dsigma2tilde_dnu.sum()))  
+        #grad = (t22-t2)/delta
+        #print("t2 is: {}, should be: {}".format(grad.sum(), term2.sum()))   
+        #grad = (t32-t3)/delta
+        #print("t3 is: {}, should be: {}".format(grad.sum(), term3.sum()))
+        #grad = (t42-t4)/delta
+        #print("t4 is: {}, should be: {}".format(grad.sum(), term4.sum()))
+        return term3.sum() #(term1+term2+term3+term4).sum()
+
     def logpdf_link(self, inv_link_f, y, Y_metadata=None):
         """
         Log Likelihood function given inverse link of f.
@@ -64,12 +130,14 @@ class Binomial(Likelihood):
         :returns: log likelihood evaluated at points inverse link of f.
         :rtype: float
         """
-        print("inv_link_f: {}, y: {}".format(inv_link_f, y))
+        #print("inv_link_f: {}, y: {}".format(inv_link_f, y))
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
 
         nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
-        return nchoosey + y*np.log(inv_link_f) + (N-y)*np.log(1.-inv_link_f)
+        t1 = y*np.log(inv_link_f)  if y>0 else 0.
+        t2 = (N-y)*np.log(1.-inv_link_f) if N-y>0 else 0.
+        return nchoosey + t1 + t2
 
         #nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
         #si = inv_link
@@ -97,8 +165,9 @@ class Binomial(Likelihood):
         """
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
-
-        return y/inv_link_f - (N-y)/(1.-inv_link_f)
+        t1 = y/inv_link_f if y>0 else 0.
+        t2 = (N-y)/(1.-inv_link_f) if N-y>0 else 0.
+        return t1 - t2
 
     def d2logpdf_dlink2(self, inv_link_f, y, Y_metadata=None):
         """
@@ -123,7 +192,9 @@ class Binomial(Likelihood):
         """
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
-        return -y/np.square(inv_link_f) - (N-y)/np.square(1.-inv_link_f)
+        t1 = -y/np.square(inv_link_f) if y>0 else 0.
+        t2 = -(N-y)/np.square(1.-inv_link_f) if N-y>0 else 0.
+        return t1+t2
 
     def d3logpdf_dlink3(self, inv_link_f, y, Y_metadata=None):
         """
@@ -154,8 +225,10 @@ class Binomial(Likelihood):
         if isinstance(self.gp_link, link_functions.Probit):
             dlogpdf_dtheta = np.zeros((self.size, f.shape[0], f.shape[1]))
             N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
-            inv_link_f = self.gp_link.transf(f)
-            dlogpdf_dtheta[0,:,:] = (y/inv_link_f - (N-y)/(1.-inv_link_f))*self.gp_link.dtransf_dtheta(f)
+            inv_link_f = self.gp_link.transf(f) 
+            t1 = y/inv_link_f if y>0 else 0.
+            t2 = (y-N)/(1.-inv_link_f) if (N-y)>0 else 0.
+            dlogpdf_dtheta[0,:,:] = (t1+t2)*self.gp_link.dtransf_dtheta(f)
             return dlogpdf_dtheta
         else:
             return super(Binomial, self).dlogpdf_dtheta(f, y, Y_metadata)
@@ -246,9 +319,11 @@ class Binomial(Likelihood):
             nu = self.gp_link.nu
             mu = v/tau
             sigma2 = 1./tau
-            a = np.sqrt(1 + sigma2*(nu**2))
+            t = 1 + sigma2*(nu**2)
+            t[t<1e-20] = 1e-20
+            a = np.sqrt(t)
             z = obs*mu/a
-            normc_z = self.gp_link.transf(z)
+            normc_z = max(self.gp_link.transf(z), 1e-20)
             m0 = normc_z
             normp_z = self.gp_link.dtransf_df(z)
             m1 = mu + (obs*sigma2*normp_z)/(normc_z*a)

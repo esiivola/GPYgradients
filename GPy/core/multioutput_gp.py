@@ -7,6 +7,7 @@ from .model import Model
 from .parameterization.variational import VariationalPosterior
 from .mapping import Mapping
 from .. import likelihoods
+from ..likelihoods.gaussian import Gaussian
 from .. import kern
 from ..inference.latent_function_inference import exact_gaussian_inference, expectation_propagation
 from ..util.normalizer import Standardize
@@ -50,7 +51,10 @@ class MultioutputGP(GP):
         likelihood = likelihoods.MixedNoise(likelihood_list)
         
         if inference_method is None:
-            inference_method = expectation_propagation.EP() 
+            if all([isinstance(l, Gaussian) for l in likelihood_list]):
+                inference_method = exact_gaussian_inference.ExactGaussianInference()
+            else:
+                inference_method = expectation_propagation.EP() 
         
         super(MultioutputGP, self).__init__(X,Y,kernel,likelihood, Y_metadata={'output_index':self.output_index}, inference_method = inference_method)# expectation_propagation.MultioutputEP()) # expectation_propagation.EP())                             
                                             #expectation_propagation.MultioutputEP())
@@ -98,6 +102,6 @@ class MultioutputGP(GP):
             self.X = ObsAr(X)
             
         self.Y_metadata={'output_index': self.output_index}
-                
-        self.inference_method.reset()
+        if isinstance(self.inference_method, expectation_propagation.EP):      
+            self.inference_method.reset()
         self.update_model(True)
