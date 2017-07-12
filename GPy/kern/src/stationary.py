@@ -115,7 +115,6 @@ class Stationary(Kern):
         #a convenience function, so we can cache dK_dr
         return self.dK_dr(self._scaled_dist(X, X2))
 
-    @Cache_this(limit=3, ignore_args=())
     def dK2_drdr_via_X(self, X, X2):
         #a convenience function, so we can cache dK_dr
         return self.dK2_drdr(self._scaled_dist(X, X2))
@@ -212,6 +211,7 @@ class Stationary(Kern):
         dr_dx = self.dr_dX(X, X2)
         return dK_dr[None,:,:]*dr_dx
 
+    @Cache_this(limit=3, ignore_args=())
     def dK_dX2(self, X, X2):
         return -1.0*self.dK_dX(X, X2)
 
@@ -363,6 +363,7 @@ class Stationary(Kern):
         else:
             return self._unscaled_dist(X, X2)/self.lengthscale
     
+    @Cache_this(limit=3, ignore_args=())
     def Kdiag(self, X):
         ret = np.empty(X.shape[0])
         ret[:] = self.variance
@@ -412,7 +413,6 @@ class Stationary(Kern):
         else:
             r = self._scaled_dist(X, X2)
             self.lengthscale.gradient += -np.sum(dL_dr*r)/self.lengthscale
-
 
     def update_gradients_direct(self, gradients, reset=True):
         """

@@ -50,5 +50,6 @@ class Model(ParamzModel, Priorizable):
         """
         #print("objective function grads")
         #print("\nlog_likelihood: {}".format(self._log_likelihood_gradients()))
+        #print(self.MultioutputKern.sum.rbf.lengthscale.gradient)
         #print("log prior: {}".format(self._log_prior_gradients()))
         return -(self._log_likelihood_gradients() + self._log_prior_gradients())

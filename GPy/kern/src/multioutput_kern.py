@@ -3,6 +3,7 @@ import numpy as np
 from functools import reduce, partial
 #from .independent_outputs import index_to_slices
 from GPy.util.multioutput import index_to_slices
+from paramz.caching import Cache_this
 
 class MultioutputKern2(Kern):
     def __init__(self, kern_list, cross_covariances={}):
@@ -189,7 +190,7 @@ class MultioutputKern(CombinationKernel):
         self.covariance = covariance
         self.link_parameters(*[kernels[i] for i in linked])
         
-
+    @Cache_this(limit=3, ignore_args=())
     def K(self, X ,X2=None):
         if X2 is None:
             X2 = X
@@ -199,6 +200,7 @@ class MultioutputKern(CombinationKernel):
         [[[[ target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['c'](X[slices[i][k],:],X2[slices2[j][l],:])) for k in range( len(slices[i]))] for l in range(len(slices2[j])) ] for i in range(len(slices))] for j in range(len(slices2))]  
         return target
 
+    @Cache_this(limit=3, ignore_args=())
     def Kdiag(self,X):
         slices = index_to_slices(X[:,self.index_dim])
         kerns = itertools.repeat(self.kern) if self.single_kern else self.kern

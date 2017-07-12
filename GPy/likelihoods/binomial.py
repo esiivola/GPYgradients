@@ -252,7 +252,7 @@ class Binomial(Likelihood):
         """
         orig_shape = gp.shape
         gp = gp.flatten()
-        N = Y_metadata['trials']
+        N = np.ones(orig_shape, dtype=np.dtype(int)) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.orig_shape, dtype=np.dtype(int)))
         Ysim = np.random.binomial(N, self.gp_link.transf(gp))
         return Ysim.reshape(orig_shape)
   

@@ -14,14 +14,17 @@ class Static(Kern):
         self.variance = Param('variance', variance, Logexp())
         self.link_parameters(self.variance)
 
+    @Cache_this(limit=3, ignore_args=())
     def Kdiag(self, X):
         ret = np.empty((X.shape[0],), dtype=np.float64)
         ret[:] = self.variance
         return ret
 
+    @Cache_this(limit=3, ignore_args=())
     def gradients_X(self, dL_dK, X, X2=None):
         return np.zeros(X.shape)
 
+    @Cache_this(limit=3, ignore_args=())
     def gradients_X_diag(self, dL_dKdiag, X):
         return np.zeros(X.shape)
 
@@ -30,12 +33,15 @@ class Static(Kern):
             X2 = X
         return np.zeros((X.shape[0], X2.shape[0], X.shape[1], X.shape[1]), dtype=np.float64)
 
+    @Cache_this(limit=3, ignore_args=())
     def dK_dX(self, X, X2):
         return np.zeros((self.input_dim, X.shape[0], X2.shape[0]), dtype=np.float64)
 
+    @Cache_this(limit=3, ignore_args=())
     def dK_dX2(self, X, X2):
         return self.dK_dX(X, X2) 
- 
+    
+    @Cache_this(limit=3, ignore_args=())
     def dK2_dXdX2(self, X, X2):
         return np.zeros((self.input_dim, self.input_dim, X.shape[0], X2.shape[0]), dtype=np.float64)
 
@@ -160,6 +166,7 @@ class Bias(Static):
     def __init__(self, input_dim, variance=1., active_dims=None, name='bias'):
         super(Bias, self).__init__(input_dim, variance, active_dims, name)
 
+    @Cache_this(limit=3, ignore_args=())
     def K(self, X, X2=None):
         shape = (X.shape[0], X.shape[0] if X2 is None else X2.shape[0])
         return np.full(shape, self.variance, dtype=np.float64)
