@@ -218,9 +218,6 @@ class MixedNoise(Likelihood):
         outputs = np.unique(ind)
         Q = np.zeros(f.shape)
         for j in outputs:
-            print(f[ind==j,:])
-            print(y[ind==j,:])
-            print(self.likelihoods_list[j].d2logpdf_df2(f[ind==j,:],y[ind==j,:],Y_metadata=None))
             Q[ind==j,:] = self.likelihoods_list[j].d2logpdf_df2(f[ind==j,:],
                 y[ind==j,:],Y_metadata=None)
         return Q
