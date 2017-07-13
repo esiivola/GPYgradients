@@ -701,6 +701,24 @@ class Matern52(Stationary):
     def dK_dr(self, r):
         return self.variance*(10./3*r -5.*r -5.*np.sqrt(5.)/3*r**2)*np.exp(-np.sqrt(5.)*r)
 
+    def dK_dvariance(self, r):
+        return (1+np.sqrt(5.)*r+5./3*r**2)*np.exp(-np.sqrt(5.)*r)
+
+    def dK2_drdr(self, r):
+        return -5./3. *np.exp(-np.sqrt(5.)*r) *(-5.*r**2 +np.sqrt(5.)*r +1.)*self.variance 
+
+    def dK2_drdr_diag(self):
+        return -5./3. *self.variance 
+
+    def dK2_dvariancedr(self, r):
+        return (10./3*r -5.*r -5.*np.sqrt(5.)/3*r**2)*np.exp(-np.sqrt(5.)*r)
+    
+    def dK3_drdrdr(self, r):
+        return -25./3.*np.exp(-np.sqrt(5.)*r)*r*(np.sqrt(5.)*r - 3.)*self.variance
+    
+    def dK3_dvariancedrdr(self,r):
+        return -5./3. *np.exp(-np.sqrt(5.)*r) *(-5.*r**2 +np.sqrt(5.)*r +1.)
+
     def Gram_matrix(self, F, F1, F2, F3, lower, upper):
         """
         Return the Gram matrix of the vector of functions F with respect to the RKHS norm. The use of this function is limited to input_dim=1.

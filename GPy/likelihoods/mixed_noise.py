@@ -212,3 +212,25 @@ class MixedNoise(Likelihood):
             if temp is not None:
                 new.append(temp)
         return np.array(new)
+    
+    def d2logpdf_df2(self, f, y, Y_metadata):
+        ind = Y_metadata['output_index'].flatten()
+        outputs = np.unique(ind)
+        Q = np.zeros(f.shape)
+        for j in outputs:
+            print(f[ind==j,:])
+            print(y[ind==j,:])
+            print(self.likelihoods_list[j].d2logpdf_df2(f[ind==j,:],y[ind==j,:],Y_metadata=None))
+            Q[ind==j,:] = self.likelihoods_list[j].d2logpdf_df2(f[ind==j,:],
+                y[ind==j,:],Y_metadata=None)
+        return Q
+    
+    def dlogpdf_df(self, f, y, Y_metadata):
+        ind = Y_metadata['output_index'].flatten()
+        outputs = np.unique(ind)
+        Q = np.zeros((y.size))
+        for j in outputs:
+            q = self.likelihoods_list[j].dlogpdf_df(f[ind==j,:],
+                y[ind==j,:],Y_metadata=None)
+            Q[ind==j] = np.hstack(q)
+        return Q

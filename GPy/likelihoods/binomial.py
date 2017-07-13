@@ -51,13 +51,29 @@ class Binomial(Likelihood):
 
     def ep_gradients(self, Y, cav_tau, cav_v, dL_dKdiag, Y_metadata=None, quad_mode='gk', boost_grad=1.):
         nu = self.gp_link.nu
-        
-        nuold = nu
+        Y = Y.flatten()
         
         mu = cav_v/cav_tau
         sigma2 = 1./cav_tau
-        z = mu*nu/(np.sqrt(sigma2*(nu**2) + 1.))
-        dz_dnu = mu/((sigma2*(nu**2) + 1.)**(3./2.))
+        t = sigma2*(nu**2) + 1.
+        t[t<1e-20] = 1e-20
+        t  = np.sqrt(t)
+        z = Y*mu*nu/(t)
+        dz_dnu = Y*mu/(t**3)
+        P = std_norm_cdf(z)
+        P[P<1e-20] = 1e-20 # for robustness
+        dP_dz = std_norm_pdf(z)
+        dP_dnu = dP_dz*dz_dnu
+        return (dP_dnu/P).sum()
+
+    def ep_gradients3(self, Y, cav_tau, cav_v, dL_dKdiag, Y_metadata=None, quad_mode='gk', boost_grad=1.):
+        nu = self.gp_link.nu
+        Y = Y.flatten()
+        
+        mu = cav_v/cav_tau
+        sigma2 = 1./cav_tau
+        z = Y*mu*nu/(np.sqrt(sigma2*(nu**2) + 1.))
+        dz_dnu = Y*mu/((sigma2*(nu**2) + 1.)**(3./2.))
         N = std_norm_pdf(z)
         P = std_norm_cdf(z)
         P[P<1e-20] = 1e-20 # for robustness
@@ -165,8 +181,15 @@ class Binomial(Likelihood):
         """
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
-        t1 = y/inv_link_f if y>0 else 0.
-        t2 = (N-y)/(1.-inv_link_f) if N-y>0 else 0.
+        #t1 = y/inv_link_f if y>0 else 0.
+        #t2 = (N-y)/(1.-inv_link_f) if N-y>0 else 0.
+        
+        Ny = N-y
+        t1 = np.zeros(y.shape)
+        t2 = np.zeros(y.shape)
+        t1[y>0] = y[y>0]/inv_link_f[y>0]
+        t2[Ny>0] = (Ny[Ny>0])/(1.-inv_link_f[Ny>0])
+        
         return t1 - t2
 
     def d2logpdf_dlink2(self, inv_link_f, y, Y_metadata=None):
@@ -192,8 +215,13 @@ class Binomial(Likelihood):
         """
         N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
         np.testing.assert_array_equal(N.shape, y.shape)
-        t1 = -y/np.square(inv_link_f) if y>0 else 0.
-        t2 = -(N-y)/np.square(1.-inv_link_f) if N-y>0 else 0.
+        #t1 = -y/np.square(inv_link_f) if y>0 else 0.
+        #t2 = -(N-y)/np.square(1.-inv_link_f) if N-y>0 else 0.
+        Ny = N-y
+        t1 = np.zeros(y.shape)
+        t2 = np.zeros(y.shape)
+        t1[y>0] = -y[y>0]/np.square(inv_link_f[y>0])
+        t2[Ny>0] = -(Ny[Ny>0])/np.square(1.-inv_link_f[Ny>0])
         return t1+t2
 
     def d3logpdf_dlink3(self, inv_link_f, y, Y_metadata=None):
@@ -226,8 +254,14 @@ class Binomial(Likelihood):
             dlogpdf_dtheta = np.zeros((self.size, f.shape[0], f.shape[1]))
             N = np.ones(y.shape) if Y_metadata is None else Y_metadata.get('trials', np.ones(y.shape))
             inv_link_f = self.gp_link.transf(f) 
-            t1 = y/inv_link_f if y>0 else 0.
-            t2 = (y-N)/(1.-inv_link_f) if (N-y)>0 else 0.
+            #t1 = y/inv_link_f if y>0 else 0.
+            #t2 = (y-N)/(1.-inv_link_f) if (N-y)>0 else 0.
+            Ny = N-y
+            t1 = np.zeros(y.shape)
+            t2 = np.zeros(y.shape)
+            t1[y>0] = y[y>0]/inv_link_f[y>0]
+            t2[Ny>0] = -(Ny[Ny>0])/(1.-inv_link_f[Ny>0])
+            
             dlogpdf_dtheta[0,:,:] = (t1+t2)*self.gp_link.dtransf_dtheta(f)
             return dlogpdf_dtheta
         else:
