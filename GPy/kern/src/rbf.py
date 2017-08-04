@@ -32,6 +32,7 @@ class RBF(Stationary):
             self.link_parameter(self.inv_l)
 
     def K_of_r(self, r):
+        #assert(np.all(r<1000000000))
         return self.variance * np.exp(-0.5 * r**2)
 
     def dK_dr(self, r):

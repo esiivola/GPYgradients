@@ -203,13 +203,13 @@ class Stationary(Kern):
     def dK_dX(self, X, X2):
         """
         compute the partial derivative of K wrt X in all dimensions
-        If X is [NxD], X2 is [MxD], returned matrix is [NxMxD]
+        If X is [NxD], X2 is [MxD], returned matrix is [DxNxM]
         """
         dK = np.zeros([X.shape[0], X2.shape[0], self.input_dim], dtype=np.float64)
         inv_dist = self._inv_dist(X, X2)
         dK_dr = self.dK_dr_via_X(X, X2)
         dr_dx = self.dr_dX(X, X2)
-        return dK_dr[None,:,:]*dr_dx
+        return np.rollaxis(dK_dr[None,:,:]*dr_dx, 0, 3)
 
     @Cache_this(limit=3, ignore_args=())
     def dK_dX2(self, X, X2):
@@ -219,11 +219,11 @@ class Stationary(Kern):
     def dK2_dXdX2(self, X, X2):
         """
         Compute the partial derivatives of K wrt X and X2 in all dimensions
-        For X [NxD], X2 [MxD], returned matrix is [NxMxDXD]
+        For X [NxD], X2 [MxD], returned matrix is [DxDxNxM]
         This function is basically a wrapper for gradients_XX-function, but it changes
         order of axes.
         """
-        return self.gradients_XX(np.ones([X.shape[0], X2.shape[0]]), X, X2).swapaxes(0,2).swapaxes(1,3)
+        return self.gradients_XX(np.ones([X.shape[0], X2.shape[0]]), X, X2)   #.swapaxes(0,2).swapaxes(1,3)
     
     def dK2_dvariancedX(self, X, X2):
         r = self._scaled_dist(X, X2)

@@ -19,10 +19,10 @@ class MixedNoise(Likelihood):
             unique = True
             for j in range(i):
                 if likelihoods_list[i] is likelihoods_list[j]:
-                    unique=False
                     for li in groups:
-                        if j in li:
+                        if j in li and unique is True:
                             li.append(i)
+                            unique=False
                             break
             if unique is True:
                 groups.append([i])
@@ -31,6 +31,7 @@ class MixedNoise(Likelihood):
         self.link_parameters(*[likelihoods_list[g[0]] for g in groups])
         self.likelihoods_list = likelihoods_list
         self.log_concave = False
+        self.not_block_really = False
 
     def moments_match_ep(self, data_i, tau_i, v_i, Y_metadata_i):
         return self.likelihoods_list[Y_metadata_i["output_index"][0]].moments_match_ep(data_i, tau_i, v_i, Y_metadata_i)
@@ -174,7 +175,7 @@ class MixedNoise(Likelihood):
             s = j + self.likelihoods_list[self.groups[i][0]].size
             if s > j:
                 for k in self.groups[i]:
-                    pdf[j:s,ind == k,:] = self.likelihoods_list[k].dlogpdf_dtheta(f[ind==k,:], y[ind==j,:], Y_metadata=None)
+                    pdf[j:s,ind == k,:] = self.likelihoods_list[k].dlogpdf_dtheta(f[ind==k,:], y[ind==k,:], Y_metadata=None)
             j=s
         return pdf
     
@@ -225,9 +226,48 @@ class MixedNoise(Likelihood):
     def dlogpdf_df(self, f, y, Y_metadata):
         ind = Y_metadata['output_index'].flatten()
         outputs = np.unique(ind)
-        Q = np.zeros((y.size))
+        Q = np.zeros(f.shape)
         for j in outputs:
-            q = self.likelihoods_list[j].dlogpdf_df(f[ind==j,:],
+            Q[ind==j,:] = self.likelihoods_list[j].dlogpdf_df(f[ind==j,:],
                 y[ind==j,:],Y_metadata=None)
-            Q[ind==j] = np.hstack(q)
         return Q
+    
+    def d3logpdf_df3(self, f, y, Y_metadata=None):
+        ind = Y_metadata['output_index'].flatten()
+        outputs = np.unique(ind)
+        Q = np.zeros(f.shape)
+        for j in outputs:
+            Q[ind==j,:] = self.likelihoods_list[j].d3logpdf_df3(f[ind==j,:],
+                y[ind==j,:],Y_metadata=None)
+        return Q
+    
+    def dlogpdf_df_dtheta(self, f, y, Y_metadata=None):
+        ind = Y_metadata['output_index'].flatten()
+        if ind.shape[0]==1:
+            ind = ind[0]*np.ones(f.shape[0])
+            y = y*np.ones(f.shape)
+        pdf = np.zeros((self.size, f.shape[0], f.shape[1]) )
+        j=0
+        for i in range(len(self.groups)):
+            s = j + self.likelihoods_list[self.groups[i][0]].size
+            if s > j:
+                for k in self.groups[i]:
+                    pdf[j:s,ind == k,:] = self.likelihoods_list[k].dlogpdf_df_dtheta(f[ind==k,:], y[ind==k,:], Y_metadata=None)
+            j=s
+        return pdf
+    
+    
+    def d2logpdf_df2_dtheta(self, f, y, Y_metadata=None):
+        ind = Y_metadata['output_index'].flatten()
+        if ind.shape[0]==1:
+            ind = ind[0]*np.ones(f.shape[0])
+            y = y*np.ones(f.shape)
+        pdf = np.zeros((self.size, f.shape[0], f.shape[1]) )
+        j=0
+        for i in range(len(self.groups)):
+            s = j + self.likelihoods_list[self.groups[i][0]].size
+            if s > j:
+                for k in self.groups[i]:
+                    pdf[j:s,ind == k,:] = self.likelihoods_list[k].d2logpdf_df2_dtheta(f[ind==k,:], y[ind==j,:], Y_metadata=None)
+            j=s
+        return pdf

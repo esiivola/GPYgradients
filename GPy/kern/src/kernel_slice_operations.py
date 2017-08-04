@@ -19,9 +19,9 @@ def put_clean(dct, name, func):
 class KernCallsViaSlicerMeta(ParametersChangedMeta):
     def __new__(cls, name, bases, dct):
         put_clean(dct, 'K', _slice_K)
-        put_clean(dct, 'dK_dX', _slice_K)
-        put_clean(dct, 'dK_dX2', _slice_K)
-        put_clean(dct, 'dK2_dXdX2', _slice_K)
+        put_clean(dct, 'dK_dX', _slice_partial_gradients_X)
+        put_clean(dct, 'dK_dX2', _slice_partial_gradients_X)
+        put_clean(dct, 'dK2_dXdX2', _slice_partial_gradients_XX)
         put_clean(dct, 'Kdiag', _slice_Kdiag)
         put_clean(dct, 'phi', _slice_Kdiag)
         put_clean(dct, 'update_gradients_full', _slice_update_gradients_full)
@@ -33,6 +33,10 @@ class KernCallsViaSlicerMeta(ParametersChangedMeta):
         put_clean(dct, 'gradients_XX', _slice_gradients_XX)
         put_clean(dct, 'gradients_XX_diag', _slice_gradients_XX_diag)
         put_clean(dct, 'gradients_X_diag', _slice_gradients_X_diag)
+        
+        put_clean(dct, 'dgradients_dX',_slice_partial_gradients_list_X)
+        put_clean(dct, 'dgradients_dX2',_slice_partial_gradients_list_X)
+        put_clean(dct, 'dgradients2_dXdX2',_slice_partial_gradients_list_XX)
 
         put_clean(dct, 'psi0', _slice_psi)
         put_clean(dct, 'psi1', _slice_psi)
@@ -83,6 +87,20 @@ class _Slice_wrap(object):
                 ret.T[np.ix_(self.k._all_dims_active, self.k._all_dims_active)] = return_val.T
             return ret
         return return_val
+    
+    def handle_return_list(self, return_val):
+        if self.ret:
+            ret = [np.zeros(self.shape) for _ in range(len(return_val))]
+            if len(self.shape) == 3:
+                for i in range(len(return_val)):
+                    ret[i][self.k._all_dims_active, :, :] = return_val[i]
+                #[ret[i].__setitem__((:, :, self.k._all_dims_active), return_val[i])  for i in range(len(return_val))]             
+            elif len(self.shape) == 4:
+                for i in range(len(return_val)):
+                    ret[i][np.ix_(self.k._all_dims_active, self.k._all_dims_active)] = return_val[i]
+                #[ret[i].__setitem__((:, :, self.k._all_dims_active, self.k._all_dims_active), return_val[i])  for i in range(len(return_val))]             
+            return ret
+        return return_val
 
 def _slice_K(f):
     @wraps(f)
@@ -117,6 +135,68 @@ def _slice_update_gradients_diag(f):
     return wrap
 
 def _slice_gradients_X(f):
+    @wraps(f)
+    def wrap(self, dL_dK, X, X2=None):
+        with _Slice_wrap(self, X, X2) as s:
+            ret = s.handle_return_array(f(self, dL_dK, s.X, s.X2))
+        return ret
+    return wrap
+
+def _slice_partial_gradients_X(f):
+    @wraps(f)
+    def wrap(self, X, X2=None):
+        if X2 is None:
+            N, M = X.shape[0], X.shape[0]
+        else:
+            N, M = X.shape[0], X2.shape[0]
+        Q1 = X.shape[1]
+        with _Slice_wrap(self, X, X2, ret_shape=(N, M, Q1)) as s:
+            ret = s.handle_return_array(f(self, s.X, s.X2))
+        return ret
+    return wrap
+
+def _slice_partial_gradients_list_X(f):
+    @wraps(f)
+    def wrap(self, X, X2=None):
+        if X2 is None:
+            N, M = X.shape[0], X.shape[0]
+        else:
+            N, M = X.shape[0], X2.shape[0]
+        Q1 = X.shape[1]
+        with _Slice_wrap(self, X, X2, ret_shape=(Q1, N, M)) as s:
+            ret = s.handle_return_list(f(self, s.X, s.X2))
+        return ret
+    return wrap
+
+def _slice_partial_gradients_XX(f):
+    @wraps(f)
+    def wrap(self, X, X2=None):
+        if X2 is None:
+            N, M = X.shape[0], X.shape[0]
+            Q1 = X.shape[1]
+        else:
+            N, M = X.shape[0], X2.shape[0]
+            Q1, Q2 = X.shape[1], X2.shape[1]
+        with _Slice_wrap(self, X, X2, ret_shape=(N, M, Q1, Q2)) as s:
+            ret = s.handle_return_array(f(self, s.X, s.X2))
+        return ret
+    return wrap
+
+def _slice_partial_gradients_list_XX(f):
+    @wraps(f)
+    def wrap(self, X, X2=None):
+        if X2 is None:
+            N, M = X.shape[0], X.shape[0]
+            Q1 = X.shape[1]
+        else:
+            N, M = X.shape[0], X2.shape[0]
+            Q1, Q2 = X.shape[1], X2.shape[1]
+        with _Slice_wrap(self, X, X2, ret_shape=(Q1, Q2, N, M)) as s:
+            ret = s.handle_return_list(f(self, s.X, s.X2))
+        return ret
+    return wrap
+
+def _slice_gradient_derivatives_X(f):
     @wraps(f)
     def wrap(self, dL_dK, X, X2=None):
         with _Slice_wrap(self, X, X2) as s:
