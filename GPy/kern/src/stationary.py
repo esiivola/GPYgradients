@@ -115,10 +115,12 @@ class Stationary(Kern):
         #a convenience function, so we can cache dK_dr
         return self.dK_dr(self._scaled_dist(X, X2))
 
+    @Cache_this(limit=3, ignore_args=())
     def dK2_drdr_via_X(self, X, X2):
         #a convenience function, so we can cache dK_dr
         return self.dK2_drdr(self._scaled_dist(X, X2))
     
+    @Cache_this(limit=3, ignore_args=())
     def dr_dX(self, X, X2=None):
         if X2 is None:
             X2 = X
@@ -127,7 +129,8 @@ class Stationary(Kern):
         rinv[rinv == 0.] -= self.variance
         lengthscale2inv = np.ones(X.shape[1])/(self.lengthscale**2)
         return rinv[None,:,:]*dist*lengthscale2inv[:,None,None]
-
+    
+    @Cache_this(limit=3, ignore_args=())
     def dr_dX2(self, X, X2):
         return -self.dr_dX(X, X2)
 
@@ -268,6 +271,9 @@ class Stationary(Kern):
         return tmp + dk3_dvariancedrdr[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:]
 
     def dK3_dlengthscaledXdX2(self, X, X2):
+        #print("dK3_dlengthscaledXdX2")
+        #print(X)
+        #print(X2)
         r = self._scaled_dist(X, X2)
         invd = self._inv_dist(X, X2)
         K = self.K_of_r(r)
@@ -281,13 +287,13 @@ class Stationary(Kern):
         dr2_dlengthscaledx = self.dr2_dlengthscaledX(X, X2)
         dr2_dlengthscaledx2 = self.dr2_dlengthscaledX2(X, X2)
         dr3_dlengthscaledxdx2 = self.dr3_dlengthscaledXdX2(X, X2)
-        I = (np.ones((X.shape[0], X.shape[0], X.shape[1], X.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
+        I = (np.ones((X.shape[0], X2.shape[0], X.shape[1], X2.shape[1]))*np.eye((X.shape[1]))).swapaxes(0,2).swapaxes(1,3)
         if not self.ARD:
             g = (dk2_drdr[None,None,:,:]*dr_dlengthscale[None,None,:,:]*dr2_dxdx2 + dk_dr[None,None,:,:]*dr3_dlengthscaledxdx2
                 +dk3_drdrdr[None,None,:,:]*dr_dlengthscale[None,None,:,:]*dr_dx[:,None,:,:]*dr_dx2[None,:,:,:] 
                 +dk2_drdr[None,None,:,:]*dr2_dlengthscaledx[:,None,:,:]*dr_dx2[None,:,:,:]
                 +dk2_drdr[None,None,:,:]*dr_dx[:,None,:,:]*dr2_dlengthscaledx2[None,:,:,:])
-            g[:,:,(invd == 0.)] = (-2.0*I[:,:,:,:]*K[None,None,:,:]/(self.lengthscale**3))[:,:,( invd == 0.)]
+            g[:,:,(invd == 0.)] = (-2.0*I[:,:,:,:]*K[None,None,:,:]/(self.lengthscale**3))[:,:,(invd == 0.)]
         else:
             g = (dk2_drdr[None,None,None,:,:]*dr_dlengthscale[:,None,None,:,:]*dr2_dxdx2[None,:,:,:,:] + dk_dr[None,None,None,:,:]*dr3_dlengthscaledxdx2
                 +dk3_drdrdr[None,None,None,:,:]*dr_dlengthscale[:,None,None,:,:]*dr_dx[None,:,None,:,:]*dr_dx2[None,None,:,:,:]

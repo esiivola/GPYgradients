@@ -83,8 +83,8 @@ class MultioutputGP(GP):
     def predictive_gradients(self, Xnew, kern=None):
         if isinstance(Xnew, list):
             Xnew, _, ind  = util.multioutput.build_XY(Xnew, None)
-            if Y_metadata is None:
-                Y_metadata={'output_index': ind}
+            #if Y_metadata is None:
+                #Y_metadata={'output_index': ind}
         return super(MultioutputGP, self).predictive_gradients(Xnew, kern)
     
     

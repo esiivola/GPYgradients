@@ -57,15 +57,6 @@ class MultioutputKern(CombinationKernel):
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])
         target =  np.zeros((X.shape[0], X2.shape[0]))
-        #for j in range(len(slices2)):
-            #for i in range(len(slices)):
-                #for l in range(len(slices2[j])):
-                    #for k in range( len(slices[i])):
-                        #print(i)
-                        #print(j)
-                        #print(slices[i][k])
-                        #print(X[slices[i][k],:].shape)
-                
         [[[[ target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['c'](X[slices[i][k],:],X2[slices2[j][l],:])) for k in range( len(slices[i]))] for l in range(len(slices2[j])) ] for i in range(len(slices))] for j in range(len(slices2))]  
         return target
 
@@ -123,7 +114,14 @@ class MultioutputKern(CombinationKernel):
         [[ self.kerns[i].update_gradients_diag(dL_dKdiag[slices[i][k]], X[slices[i][k],:], False) for k in range(len(slices[i]))] for i in range(len(slices))]
     
     def gradients_X(self,dL_dK, X, X2=None):
-        assert 0, "gradients_X"
+        if X2 is None:
+            X2 = X
+        slices = index_to_slices(X[:,self.index_dim])
+        slices2 = index_to_slices(X2[:,self.index_dim])
+        print(X2)
+        print(dL_dK.shape)
+        grad = np.zeros(dL_dK.shape)
+        [[[[ self.covariance[i][j]['ug'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]        
     
     def gradients_X_diag(self, dL_dKdiag, X):
         assert 0, "gradients_X_diag"
