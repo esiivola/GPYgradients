@@ -98,16 +98,6 @@ class MixedNoise(Likelihood):
             var_new[ind==j,:] = v
         return mu_new, var_new
     
-        #for i in range(len(ind)):
-            #mu[i,:], var[i,:] = self.likelihoods_list[ind[i]].predictive_values(mu[i,:], var[i,:], full_cov)
-        #return mu, var
-        #_variance = np.array([self.likelihoods_list[j].variance for j in ind ])
-        #if full_cov:
-            #var += np.eye(var.shape[0])*_variance
-        #else:
-            #var += _variance
-        #return mu, var
-
     def predictive_variance(self, mu, sigma, Y_metadata):
         ind = Y_metadata['output_index'].flatten()
         outputs = np.unique(ind)
@@ -152,7 +142,15 @@ class MixedNoise(Likelihood):
             _ysim = np.array([np.random.normal(lik.gp_link.transf(gpj), scale=np.sqrt(lik.variance), size=1) for gpj in gp_filtered.flatten()])
             Ysim[flt,:] = _ysim.reshape(n1,N2)
         return Ysim
-
+    
+    def log_predictive_density(self, y_test, mu_star, var_star, Y_metadata=None):
+        ind = Y_metadata['output_index'].flatten()
+        outputs = np.unique(ind)
+        log_pred = np.zeros(y_test.shape)
+        for j in outputs:
+            log_pred[ind==j,:] = self.likelihoods_list[j].log_predictive_density(y_test[ind==j,:], mu_star[ind==j,:], var_star[ind==j,:], Y_metadata=None)
+        return log_pred
+    
     def logpdf(self, f, y, Y_metadata=None):
         ind = Y_metadata['output_index'].flatten()
         outputs = np.unique(ind)
@@ -255,7 +253,6 @@ class MixedNoise(Likelihood):
                     pdf[j:s,ind == k,:] = self.likelihoods_list[k].dlogpdf_df_dtheta(f[ind==k,:], y[ind==k,:], Y_metadata=None)
             j=s
         return pdf
-    
     
     def d2logpdf_df2_dtheta(self, f, y, Y_metadata=None):
         ind = Y_metadata['output_index'].flatten()

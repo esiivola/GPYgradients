@@ -35,8 +35,6 @@ class CombinedLikelihood(Likelihood):
         index = np.asarray([i for i in range(X.size[0]) if X[i,index_dim] in gaussian_i], dtype=np.int)
         tau = np.asarray([1./self.likelihoods[i].variance for i in likelihood_i if i in gaussian_i], dtype=np.float64)
         v = np.asarray([Y[i] for i in likelihood_i if i in gaussian_i], dtype=np.float64) * tau
-        
-        
 
     def predictive_values(self, mu_list, var_list, full_cov=False, Y_metadata_list=None):
         nl = len(self.likelihoods)
@@ -52,7 +50,7 @@ class CombinedLikelihood(Likelihood):
         mu = [None]*nl
         for i in range(0,nl):
             mu[i] = self.likelihoods[i].predictive_mean(mu_list[i], sigma_list[i])
-        return mu, var
+        return mu
 
     def predictive_variance(self, mu, sigma, Y_metadata):
         nl = len(self.likelihoods)
@@ -61,6 +59,13 @@ class CombinedLikelihood(Likelihood):
         for i in range(0,nl):
             var[i] = self.likelihoods[i].predictive_variance(mu_list[i], sigma_list[i], predictive_mean_list[i])
         return var
+    
+    def log_predictive_density(self, y_test, mu_star, var_star, Y_metadata=None):
+        nl = len(self.likelihoods)
+        mu = [None]*nl
+        for i in range(0,nl):
+            mu[i] = self.likelihoods[i].predictive_mean(mu_list[i], sigma_list[i])
+        return dens
 
     def predictive_quantiles(self, mu, var, quantiles, Y_metadata):
         nl = len(self.likelihoods)
