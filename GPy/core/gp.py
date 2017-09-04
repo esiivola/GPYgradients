@@ -109,6 +109,7 @@ class GP(Model):
         self.link_parameter(self.likelihood)
         self.posterior = None
 
+
         # The predictive variable to be used to predict using the posterior object's
         # woodbury_vector and woodbury_inv is defined as predictive_variable
         # as long as the posterior has the right woodbury entries.

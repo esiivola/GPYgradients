@@ -74,7 +74,13 @@ class Kern(Parameterized):
             return X[:, self._all_dims_active].astype('float')
         except:
             return X[:, self._all_dims_active]
-
+        
+    def _project_dim(self, dim):
+        try:
+            return np.where(self._all_dims_active == dim)[0][0]
+        except:
+            return None
+        
     def K(self, X, X2):
         """
         Compute the kernel function.

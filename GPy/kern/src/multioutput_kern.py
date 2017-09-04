@@ -79,33 +79,6 @@ class MultioutputKern(CombinationKernel):
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])                
         [[[[ self.covariance[i][j]['ug'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]
-        #print('new iter')
-        #print("dldk: {}".format(np.sum(dL_dK)))
-        #print("ls {}".format(self.kern[0].lengthscale.values))
-        #print("v {}".format(self.kern[0].variance.values))
-        #print("lengthscale gradient: {}".format(self.kern[0].lengthscale.gradient))
-        #print("variance gradient: {}".format(self.kern[0].variance.gradient))
-        #d = 0.00001
-        #k = self.K(X,X2)
-        #lg_orig=self.kern[0].lengthscale
-        #self.kern[0].lengthscale._update_on = False
-        #self.kern[0].lengthscale += d
-        #k2 = self.K(X,X2)
-        #self.kern[0].lengthscale = lg_orig
-        #print("ref lg g")
-        #print((k2-k)/d)
-        #self.kern[0].lengthscale._update_on = True
-        #ko = self.K(X,X2)
-        #v_orig=self.kern[0].variance
-        #self.kern[0].variance._update_on = False
-        #self.kern[0].variance += d
-        #k2 = self.K(X,X2)
-        #self.kern[0].variance = v_orig
-        #print("ref v g")
-        #print((k2-ko)/d)
-        ###print(np.sum(dL_dK))
-        #self.kern[0].variance._update_on = True
-        ###print(np.sum(ko-k))
         
     def update_gradients_diag(self, dL_dKdiag, X):
         for kern in self.kerns: kern.reset_gradients()
@@ -118,8 +91,6 @@ class MultioutputKern(CombinationKernel):
             X2 = X
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])
-        print(X2)
-        print(dL_dK.shape)
         grad = np.zeros(dL_dK.shape)
         [[[[ self.covariance[i][j]['ug'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]        
     

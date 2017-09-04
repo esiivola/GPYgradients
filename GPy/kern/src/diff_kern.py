@@ -1,5 +1,6 @@
 from .kern import CombinationKernel
 import numpy as np
+import time
 from paramz.caching import Cache_this
 
 # A thin wrapper around the base kernel to tell that we are dealing with a partial derivative of a Kernel
@@ -16,43 +17,43 @@ class DiffKern(CombinationKernel):
     def K(self, X, X2, dimX2 = None): #X in dimension self.dimension
         if dimX2 is None:
             dimX2 = self.dimension
-        return self.base_kern.dK2_dXdX2(X,X2)[:, :, self.dimension, dimX2]
+        return self.base_kern.dK2_dXdX2(X,X2, self.dimension, dimX2) #[:, :, self.dimension, dimX2]
  
     @Cache_this(limit=3, ignore_args=())
     def Kdiag(self, X):
-        return np.diag(self.base_kern.dK2_dXdX2(X,X)[ :, :, self.dimension, self.dimension])
+        return np.diag(self.base_kern.dK2_dXdX2(X,X, self.dimension, self.dimension)) #[ :, :, self.dimension, self.dimension])
     
     @Cache_this(limit=3, ignore_args=())
     def dK_dX_wrap(self, X, X2): #X in dimension self.dimension
-        return self.base_kern.dK_dX(X,X2)[:,:, self.dimension]
+        return self.base_kern.dK_dX(X,X2, self.dimension) #[:,:, self.dimension]
     
     def reset_gradients(self):
         self.base_kern.reset_gradients()
     
     @Cache_this(limit=3, ignore_args=())
     def dK_dX2_wrap(self, X, X2): #X in dimension self.dimension
-        return self.base_kern.dK_dX2(X,X2)[:, :, self.dimension]
+        return self.base_kern.dK_dX2(X,X2, self.dimension) #[:, :, self.dimension]
     
     def update_gradients_full(self, dL_dK, X, X2=None, reset=True, dimX2=None):
         if dimX2 is None:
             dimX2 = self.dimension
-        gradients = self.base_kern.dgradients2_dXdX2(X,X2)
+        gradients = self.base_kern.dgradients2_dXdX2(X,X2, self.dimension, dimX2)
         #print("update_gradients_full, {} {}".format(self.dimension, dimX2))
         #print(gradients[0][self.dimension,dimX2,:,:])
-        self.base_kern.update_gradients_direct([np.sum(dL_dK*gradient[self.dimension,dimX2,:,:]) for gradient in gradients], reset)
-
+        self.base_kern.update_gradients_direct([np.sum(dL_dK*gradient) for gradient in gradients], reset)
+    
     def update_gradients_diag(self, dL_dK_diag, X, reset=True): #X in dimension self.dimension
-        gradients = self.base_kern.dgradients2_dXdX2(X,X)
-        self.base_kern.update_gradients_direct([np.sum(dL_dK_diag*np.diag(gradient[self.dimension, self.dimension,:,:])) for gradient in gradients], reset)
+        gradients = self.base_kern.dgradients2_dXdX2(X,X, self.dimension, self.dimension)
+        self.base_kern.update_gradients_direct([np.sum(dL_dK_diag*np.diag(gradient)) for gradient in gradients], reset)
     
     def update_gradients_dK_dX(self, dL_dK, X, X2=None, reset=True): #X in dimension self.dimension
-        gradients = self.base_kern.dgradients_dX(X,X2)
+        gradients = self.base_kern.dgradients_dX(X,X2, self.dimension)
         #print("update_gradients_dK_dX, {}".format(self.dimension))
         #print(gradients[0][self.dimension,:,:])
-        self.base_kern.update_gradients_direct([np.sum(dL_dK*gradient[self.dimension,:,:]) for gradient in gradients], reset)
+        self.base_kern.update_gradients_direct([np.sum(dL_dK*gradient) for gradient in gradients], reset)
         
     def update_gradients_dK_dX2(self, dL_dK, X, X2=None, reset=True): #X in dimension self.dimension
-        gradients = self.base_kern.dgradients_dX2(X,X2)
+        gradients = self.base_kern.dgradients_dX2(X,X2, self.dimension)
         #print("update_gradients_dK_dX2, {}".format(self.dimension))
         #print(gradients[0][self.dimension,:,:])
-        self.base_kern.update_gradients_direct([np.sum(dL_dK*gradient[self.dimension,:,:]) for gradient in gradients], reset)
+        self.base_kern.update_gradients_direct([np.sum(dL_dK*gradient) for gradient in gradients], reset)

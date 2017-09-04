@@ -67,7 +67,7 @@ class Add(CombinationKernel):
         return reduce(np.add, (p.Kdiag(X) for p in which_parts))
 
     @Cache_this(limit=3, force_kwargs=['which_parts'])
-    def dK_dX(self, X, X2, which_parts=None):
+    def dK_dX(self, X, X2, dimX, which_parts=None):
         if which_parts is None:
             which_parts = self.parts
         elif not isinstance(which_parts, (list, tuple)):
@@ -76,10 +76,10 @@ class Add(CombinationKernel):
         #ret = np.zeros((X.shape[1], X.shape[0], X2.shape[0]))
         #for p in which_parts:
         #    ret[p.active_dims,:,:] = p.dK_dX(X, X2)
-        return reduce(np.add, (p.dK_dX(X, X2) for p in which_parts)) #ret
+        return reduce(np.add, (p.dK_dX(X, X2, dimX) for p in which_parts)) #ret
 
     @Cache_this(limit=3, force_kwargs=['which_parts'])
-    def dK_dX2(self, X, X2, which_parts=None):
+    def dK_dX2(self, X, X2, dimX2, which_parts=None):
         if which_parts is None:
             which_parts = self.parts
         elif not isinstance(which_parts, (list, tuple)):
@@ -88,10 +88,10 @@ class Add(CombinationKernel):
         #ret = np.zeros((X.shape[1], X.shape[0], X2.shape[0]))
         #for p in which_parts:
         #    ret[p.active_dims,:,:] = p.dK_dX2(X, X2)
-        return reduce(np.add, (p.dK_dX2(X, X2) for p in which_parts))# ret
+        return reduce(np.add, (p.dK_dX2(X, X2, dimX2) for p in which_parts))# ret
         
     @Cache_this(limit=3, force_kwargs=['which_parts'])
-    def dK2_dXdX2(self, X, X2, which_parts=None):
+    def dK2_dXdX2(self, X, X2, dimX, dimX2, which_parts=None):
         if which_parts is None:
             which_parts = self.parts
         elif not isinstance(which_parts, (list, tuple)):
@@ -100,16 +100,16 @@ class Add(CombinationKernel):
         #ret = np.zeros((X.shape[1], X2.shape[1], X.shape[0], X2.shape[0]))
         #for p in which_parts:
         #    ret[p.active_dims, p.active_dims,:,:] = p.dK2_dXdX2(X, X2)
-        return reduce(np.add, (p.dK2_dXdX2(X, X2) for p in which_parts)) #ret
+        return reduce(np.add, (p.dK2_dXdX2(X, X2, dimX, dimX2) for p in which_parts)) #ret
 
-    def dgradients_dX(self, X, X2):
-        return list(itertools.chain(*[p.dgradients_dX(X, X2) for p in self.parts]))
+    def dgradients_dX(self, X, X2, dimX):
+        return list(itertools.chain(*[p.dgradients_dX(X, X2, dimX) for p in self.parts]))
 
-    def dgradients_dX2(self, X, X2):
-        return list(itertools.chain(*[p.dgradients_dX2(X, X2) for p in self.parts]))
+    def dgradients_dX2(self, X, X2, dimX2):
+        return list(itertools.chain(*[p.dgradients_dX2(X, X2, dimX2) for p in self.parts]))
 
-    def dgradients2_dXdX2(self, X, X2):
-        return list(itertools.chain(*[p.dgradients2_dXdX2(X, X2) for p in self.parts]))
+    def dgradients2_dXdX2(self, X, X2, dimX, dimX2):
+        return list(itertools.chain(*[p.dgradients2_dXdX2(X, X2, dimX, dimX2) for p in self.parts]))
  
     def reset_gradients(self):
         [p.reset_gradients() for p in self.parts]

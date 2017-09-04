@@ -41,7 +41,6 @@ class ExactGaussianInference(LatentFunctionInference):
 
         Ky = K.copy()
         diag.add(Ky, variance+1e-8)
-
         Wi, LW, LWi, W_logdet = pdinv(Ky)
 
         alpha, _ = dpotrs(LW, YYT_factor, lower=1)
