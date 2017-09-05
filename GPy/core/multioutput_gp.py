@@ -87,6 +87,12 @@ class MultioutputGP(GP):
                 #Y_metadata={'output_index': ind}
         return super(MultioutputGP, self).predictive_gradients(Xnew, kern)
     
+    def log_predictive_density(self, x_test, y_test, Y_metadata=None):
+        if isinstance(x_test, list):
+            x_test, y_test, ind  = util.multioutput.build_XY(x_test, y_test)
+            if Y_metadata is None:
+                Y_metadata={'output_index': ind}
+        return super(MultioutputGP, self).log_predictive_density(x_test, y_test, Y_metadata)
     
     def set_XY(self, X=None, Y=None):
         if isinstance(X, list):
