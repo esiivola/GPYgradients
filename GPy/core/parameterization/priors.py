@@ -345,7 +345,11 @@ class InverseGamma(Gamma):
             for instance in cls._instances:
                 if instance().a == a and instance().b == b:
                     return instance()
-        o = super(Prior, cls).__new__(cls, a, b)
+        newfunc = super(Prior, cls).__new__
+        if newfunc is object.__new__:
+            o = newfunc(cls)  
+        else:
+            o = newfunc(cls, a, b)
         cls._instances.append(weakref.ref(o))
         return cls._instances[-1]()
 
@@ -1258,7 +1262,8 @@ class HalfT(Prior):
         above_zero = theta > 1e-6
         v = self.nu
         sigma2 = self.A
-        grad[above_zero] = -0.5*(v+1)*(2*theta[above_zero])/(v*sigma2 + theta[above_zero][0]**2)
+        if(above_zero.shape[0]>1):
+            grad[above_zero] = -0.5*(v+1)*(2*theta[above_zero])/(v*sigma2 + theta[above_zero][0]**2)
         return grad
 
     def rvs(self, n):

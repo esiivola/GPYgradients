@@ -190,14 +190,11 @@ class GP(Model):
             This method is not designed to be called manually, the framework is set up to automatically call this method upon changes to parameters, if you call
             this method yourself, there may be unexpected consequences.
         """
-        start = time.time()
         self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.likelihood, self.Y_normalized, self.mean_function, self.Y_metadata)
         self.likelihood.update_gradients(self.grad_dict['dL_dthetaL'])
         self.kern.update_gradients_full(self.grad_dict['dL_dK'], self.X)
         if self.mean_function is not None:
             self.mean_function.update_gradients(self.grad_dict['dL_dm'], self.X)
-        end = time.time()
-        print("updating the model took: {}".format(str(end-start)))
         
     def log_likelihood(self):
         """

@@ -29,22 +29,22 @@ class MultioutputKern(CombinationKernel):
             unique=True
             for j in range(0,nl):
                 if i==j or (kernels[i] is kernels[j]):
-                    covariance[i][j] = {'c': kernels[i].K, 'ug': kernels[i].update_gradients_full}
+                    covariance[i][j] = {'K': kernels[i].K, 'update_gradients_full': kernels[i].update_gradients_full, 'gradients_X': kernels[i].gradients_X}
                     if i>j:
                         unique=False
                 elif cross_covariances.get((i,j)) is not None: #cross covariance is given
                     covariance[i][j] = cross_covariances.get((i,j))
                 elif kernels[i].name == 'diffKern' and kernels[i].base_kern == kernels[j]: # one is derivative of other
-                    covariance[i][j] = {'c': kernels[i].dK_dX_wrap, 'ug': kernels[i].update_gradients_dK_dX}
+                    covariance[i][j] = {'K': kernels[i].dK_dX_wrap, 'update_gradients_full': kernels[i].update_gradients_dK_dX, 'gradients_X': kernels[i].gradients_X}
                     unique=False
                 elif kernels[j].name == 'diffKern' and kernels[j].base_kern == kernels[i]: # one is derivative of other
-                    covariance[i][j] = {'c': kernels[j].dK_dX2_wrap, 'ug': kernels[j].update_gradients_dK_dX2}
+                    covariance[i][j] = {'K': kernels[j].dK_dX2_wrap, 'update_gradients_full': kernels[j].update_gradients_dK_dX2, 'gradients_X': kernels[j].gradients_X2}
                 elif kernels[i].name == 'diffKern' and kernels[j].name == 'diffKern' and kernels[i].base_kern == kernels[j].base_kern: #both are partial derivatives
-                    covariance[i][j] = {'c': partial(kernels[i].K, dimX2=kernels[j].dimension), 'ug': partial(kernels[i].update_gradients_full, dimX2=kernels[j].dimension)}
+                    covariance[i][j] = {'K': partial(kernels[i].K, dimX2=kernels[j].dimension), 'update_gradients_full': partial(kernels[i].update_gradients_full, dimX2=kernels[j].dimension), 'gradients_X':None}
                     if i>j:
                         unique=False
                 else: # zero matrix
-                    covariance[i][j] = {'c': lambda x, x2: np.zeros((x.shape[0],x2.shape[0])), 'ug': lambda x, x2: np.zeros((x.shape[0],x2.shape[0]))}       
+                    covariance[i][j] = {'K': lambda x, x2: np.zeros((x.shape[0],x2.shape[0])), 'update_gradients_full': lambda x, x2: np.zeros((x.shape[0],x2.shape[0])), 'gradients_X': lambda x, x2: np.zeros((x.shape[0],x.shape[1]))}       
             if unique is True:
                 linked.append(i)
         self.covariance = covariance
@@ -57,7 +57,7 @@ class MultioutputKern(CombinationKernel):
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])
         target =  np.zeros((X.shape[0], X2.shape[0]))
-        [[[[ target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['c'](X[slices[i][k],:],X2[slices2[j][l],:])) for k in range( len(slices[i]))] for l in range(len(slices2[j])) ] for i in range(len(slices))] for j in range(len(slices2))]  
+        [[[[ target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['K'](X[slices[i][k],:],X2[slices2[j][l],:])) for k in range( len(slices[i]))] for l in range(len(slices2[j])) ] for i in range(len(slices))] for j in range(len(slices2))]  
         return target
 
     @Cache_this(limit=3, ignore_args=())
@@ -78,34 +78,7 @@ class MultioutputKern(CombinationKernel):
             X2 = X
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])                
-        [[[[ self.covariance[i][j]['ug'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]
-        #print('new iter')
-        #print("dldk: {}".format(np.sum(dL_dK)))
-        #print("ls {}".format(self.kern[0].lengthscale.values))
-        #print("v {}".format(self.kern[0].variance.values))
-        #print("lengthscale gradient: {}".format(self.kern[0].lengthscale.gradient))
-        #print("variance gradient: {}".format(self.kern[0].variance.gradient))
-        #d = 0.00001
-        #k = self.K(X,X2)
-        #lg_orig=self.kern[0].lengthscale
-        #self.kern[0].lengthscale._update_on = False
-        #self.kern[0].lengthscale += d
-        #k2 = self.K(X,X2)
-        #self.kern[0].lengthscale = lg_orig
-        #print("ref lg g")
-        #print((k2-k)/d)
-        #self.kern[0].lengthscale._update_on = True
-        #ko = self.K(X,X2)
-        #v_orig=self.kern[0].variance
-        #self.kern[0].variance._update_on = False
-        #self.kern[0].variance += d
-        #k2 = self.K(X,X2)
-        #self.kern[0].variance = v_orig
-        #print("ref v g")
-        #print((k2-ko)/d)
-        ###print(np.sum(dL_dK))
-        #self.kern[0].variance._update_on = True
-        ###print(np.sum(ko-k))
+        [[[[ self.covariance[i][j]['update_gradients_full'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]
         
     def update_gradients_diag(self, dL_dKdiag, X):
         for kern in self.kerns: kern.reset_gradients()
@@ -118,10 +91,9 @@ class MultioutputKern(CombinationKernel):
             X2 = X
         slices = index_to_slices(X[:,self.index_dim])
         slices2 = index_to_slices(X2[:,self.index_dim])
-        print(X2)
-        print(dL_dK.shape)
-        grad = np.zeros(dL_dK.shape)
-        [[[[ self.covariance[i][j]['ug'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:], False) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))]        
+        target = np.zeros((X.shape[0], X.shape[1]) )
+        [[[[ target.__setitem__((slices[i][k]), target[slices[i][k],:] + self.covariance[i][j]['gradients_X'](dL_dK[slices[i][k],slices2[j][l]], X[slices[i][k],:], X2[slices2[j][l],:]) ) for k in range(len(slices[i]))] for l in range(len(slices2[j]))] for i in range(len(slices))] for j in range(len(slices2))] 
+        return target
     
     def gradients_X_diag(self, dL_dKdiag, X):
         assert 0, "gradients_X_diag"

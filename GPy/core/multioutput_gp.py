@@ -15,6 +15,8 @@ from .. import util
 from paramz import ObsAr
 from .gp import GP
 
+from GPy.util.multioutput import index_to_slices
+
 import logging
 import warnings
 logger = logging.getLogger("GP")
@@ -68,7 +70,7 @@ class MultioutputGP(GP):
     
     def predict(self, Xnew, full_cov=False, Y_metadata=None, kern=None, likelihood=None, include_likelihood=True):
         if isinstance(Xnew, list):
-            Xnew, _, ind  = util.multioutput.build_XY(Xnew,None)
+            Xnew, _, ind = util.multioutput.build_XY(Xnew,None)
             if Y_metadata is None:
                 Y_metadata={'output_index': ind}
         return super(MultioutputGP, self).predict(Xnew, full_cov, Y_metadata, kern, likelihood, include_likelihood)
@@ -86,6 +88,54 @@ class MultioutputGP(GP):
             #if Y_metadata is None:
                 #Y_metadata={'output_index': ind}
         return super(MultioutputGP, self).predictive_gradients(Xnew, kern)
+
+    def predictive_gradients(self, Xnew, kern=None): #XNEW IS NOT A LIST!!
+        """
+        Compute the derivatives of the predicted latent function with respect to X*
+
+        Given a set of points at which to predict X* (size [N*,Q]), compute the
+        derivatives of the mean and variance. Resulting arrays are sized:
+         dmu_dX* -- [N*, Q ,D], where D is the number of output in this GP (usually one).
+
+        Note that this is not the same as computing the mean and variance of the derivative of the function!
+
+         dv_dX*  -- [N*, Q],    (since all outputs have the same variance)
+        :param X: The points at which to get the predictive gradients
+        :type X: np.ndarray (Xnew x self.input_dim)
+        :returns: dmu_dX, dv_dX
+        :rtype: [np.ndarray (N*, Q ,D), np.ndarray (N*,Q) ]
+
+        """
+        
+        if isinstance(Xnew, list):
+            Xnew, _, ind  = util.multioutput.build_XY(Xnew, None)
+        
+        slices = index_to_slices(Xnew[:,-1])
+        
+        for i in range(len(slices)):
+            if ((self.kern.kern[i].name == 'diffKern' ) and len(slices[i])>0):
+                assert 0, "It is not (yet) possible to predict gradients of gradient observations, sorry :)"
+ 
+        if kern is None:
+            kern = self.kern
+        mean_jac = np.empty((Xnew.shape[0],Xnew.shape[1]-1,self.output_dim))
+        for i in range(self.output_dim):
+            mean_jac[:,:,i] = kern.gradients_X(self.posterior.woodbury_vector[:,i:i+1].T, Xnew, self._predictive_variable)[:,0:-1]
+
+        # gradients wrt the diagonal part k_{xx}
+        dv_dX = kern.gradients_X(np.eye(Xnew.shape[0]), Xnew)[:,0:-1]
+        #grads wrt 'Schur' part K_{xf}K_{ff}^{-1}K_{fx}
+        if self.posterior.woodbury_inv.ndim == 3:
+            tmp = np.empty(dv_dX.shape + (self.posterior.woodbury_inv.shape[2],))
+            tmp[:] = dv_dX[:,:,None]
+            for i in range(self.posterior.woodbury_inv.shape[2]):
+                alpha = -2.*np.dot(kern.K(Xnew, self._predictive_variable), self.posterior.woodbury_inv[:, :, i])
+                tmp[:, :, i] += kern.gradients_X(alpha, Xnew, self._predictive_variable)
+        else:
+            tmp = dv_dX
+            alpha = -2.*np.dot(kern.K(Xnew, self._predictive_variable), self.posterior.woodbury_inv)
+            tmp += kern.gradients_X(alpha, Xnew, self._predictive_variable)[:,0:-1]
+        return mean_jac, tmp
     
     def log_predictive_density(self, x_test, y_test, Y_metadata=None):
         if isinstance(x_test, list):
