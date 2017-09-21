@@ -99,7 +99,6 @@ class MultioutputGP(GP):
             Xnew, _, ind  = util.multioutput.build_XY(Xnew, None)
         
         slices = index_to_slices(Xnew[:,-1])
-        
         for i in range(len(slices)):
             if ((self.kern.kern[i].name == 'diffKern' ) and len(slices[i])>0):
                 assert 0, "It is not (yet) possible to predict gradients of gradient observations, sorry :)"

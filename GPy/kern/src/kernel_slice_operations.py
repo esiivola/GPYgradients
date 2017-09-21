@@ -170,33 +170,36 @@ def _slice_dK2_dXdX2(f):
 
 def _slice_partial_gradients_X(f):
     @wraps(f)
-    def wrap(self, X, X2, d):
+    def wrap(self, X, X2, dim):
         if X2 is None:
             N, M = X.shape[0], X.shape[0]
         else:
             N, M = X.shape[0], X2.shape[0]
         Q1 = X.shape[1]
         with _Slice_wrap(self, X, X2, ret_shape=(N, M, Q1)) as s:
-            ret = s.handle_return_array(f(self, s.X, s.X2, d))
+            ret = s.handle_return_array(f(self, s.X, s.X2, dim))
         return ret
     return wrap
 
 def _slice_partial_gradients_list_X(f):
     @wraps(f)
-    def wrap(self, X, X2=None):
+    def wrap(self, X, X2, dim):
         if X2 is None:
             N, M = X.shape[0], X.shape[0]
         else:
             N, M = X.shape[0], X2.shape[0]
-        Q1 = X.shape[1]
-        with _Slice_wrap(self, X, X2, ret_shape=(Q1, N, M)) as s:
-            ret = s.handle_return_list(f(self, s.X, s.X2))
+        with _Slice_wrap(self, X, X2, ret_shape=(N, M)) as s:
+            d = s.k._project_dim(dim)
+            if d is None:
+                ret = [np.zeros((N, M)) for i in range(s.k.size)]
+            else:            
+                ret = f(self, s.X, s.X2, d)
         return ret
     return wrap
 
 def _slice_partial_gradients_XX(f):
     @wraps(f)
-    def wrap(self, X, X2=None):
+    def wrap(self, X, X2, dim, dimX2):
         if X2 is None:
             N, M = X.shape[0], X.shape[0]
             Q1 = X.shape[1]
@@ -204,21 +207,24 @@ def _slice_partial_gradients_XX(f):
             N, M = X.shape[0], X2.shape[0]
             Q1, Q2 = X.shape[1], X2.shape[1]
         with _Slice_wrap(self, X, X2, ret_shape=(N, M, Q1, Q2)) as s:
-            ret = s.handle_return_array(f(self, s.X, s.X2))
+            ret = s.handle_return_array(f(self, s.X, s.X2, dim, dimX2))
         return ret
     return wrap
 
 def _slice_partial_gradients_list_XX(f):
     @wraps(f)
-    def wrap(self, X, X2=None):
+    def wrap(self, X, X2, dimX, dimX2):
         if X2 is None:
             N, M = X.shape[0], X.shape[0]
-            Q1 = X.shape[1]
         else:
             N, M = X.shape[0], X2.shape[0]
-            Q1, Q2 = X.shape[1], X2.shape[1]
-        with _Slice_wrap(self, X, X2, ret_shape=(Q1, Q2, N, M)) as s:
-            ret = s.handle_return_list(f(self, s.X, s.X2))
+        with _Slice_wrap(self, X, X2, ret_shape=(N, M)) as s:
+            d = s.k._project_dim(dimX)
+            d2 = s.k._project_dim(dimX2)
+            if (d is None) or (d2 is None):
+                ret = [np.zeros((N, M)) for i in range(s.k.size)]
+            else:
+                ret = f(self, s.X, s.X2, d, d2)
         return ret
     return wrap
 

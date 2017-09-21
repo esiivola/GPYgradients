@@ -35,15 +35,15 @@ class Static(Kern):
 
     @Cache_this(limit=3, ignore_args=())
     def dK_dX(self, X, X2, dim):
-        return np.zeros((X.shape[0], X2.shape[0], self.input_dim), dtype=np.float64)
+        return np.zeros((X.shape[0], X2.shape[0]), dtype=np.float64)
 
     @Cache_this(limit=3, ignore_args=())
     def dK_dX2(self, X, X2, dim):
-        return self.dK_dX(X, X2) 
+        return self.dK_dX(X, X2, dim) 
     
     @Cache_this(limit=3, ignore_args=())
     def dK2_dXdX2(self, X, X2, dim, dimX2):
-        return np.zeros((X.shape[0], X2.shape[0], self.input_dim, self.input_dim), dtype=np.float64)
+        return np.zeros((X.shape[0], X2.shape[0]), dtype=np.float64)
 
     def dgradients_dX(self, X, X2, dimX):
         return [np.zeros((X.shape[0], X2.shape[0]), dtype=np.float64)]
