@@ -30,7 +30,6 @@ class Binomial(Likelihood):
     def pdf_link(self, inv_link_f, y, Y_metadata):
         """
         Likelihood function given inverse link of f.
-
         .. math::
             py(_{i}|\\lambda(f_{i})) = \\lambda(f_{i})^{y_{i}}(1-f_{i})^{1-y_{i}}
 
@@ -130,6 +129,30 @@ class Binomial(Likelihood):
         #grad = (t42-t4)/delta
         #print("t4 is: {}, should be: {}".format(grad.sum(), term4.sum()))
         return term3.sum() #(term1+term2+term3+term4).sum()
+
+    def logpdf(self, f, y, Y_metadata=None):
+        """
+        Evaluates the link function link(f) then computes the log likelihood (log pdf) using it
+
+        .. math:
+            \\log p(y|\\lambda(f))
+
+        :param f: latent variables f
+        :type f: Nx1 array
+        :param y: data
+        :type y: Nx1 array
+        :param Y_metadata: Y_metadata which is not used in student t distribution - not used
+        :returns: log likelihood evaluated for this point
+        :rtype: float
+        """
+        if isinstance(self.gp_link, link_functions.Identity):
+            return self.logpdf_link(f, y, Y_metadata=Y_metadata)
+        elif Y_metadata is not None:
+            inv_link_f = self.gp_link.transf(f)
+            return self.logpdf_link(inv_link_f, y, Y_metadata=Y_metadata)
+        else:
+            inv_link_f = self.gp_link.transf(y*f)
+            return self.logpdf_link(inv_link_f, np.array([[1]]), Y_metadata=None)  
 
     def logpdf_link(self, inv_link_f, y, Y_metadata=None):
         """
@@ -301,16 +324,16 @@ class Binomial(Likelihood):
         #else:
             #return super(Binomial, self).ep_gradients(Y, tau, v, Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag=dL_dKdiag)
 
-    def ep_gradients2(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
-        if isinstance(self.gp_link, link_functions.Probit):
-            nu = self.gp_link.nu
-            mu = v/tau
-            sigma2 = 1./tau
-            a = np.sqrt(1 + sigma2/(nu**2))
-            z = mu/a
-            return -1.0*np.sum((1.0/self.gp_link.transf(z))*self.gp_link.dtransf_df(z)*nu*z/(sigma2+nu**2))
-        else:
-            return super(Binomial, self).ep_gradients(Y, tau, v, Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag=dL_dKdiag)
+    #def ep_gradients2(self, Y, tau, v, Y_metadata=None, gh_points=None, boost_grad=1., dL_dKdiag=None):
+        #if isinstance(self.gp_link, link_functions.Probit):
+            #nu = self.gp_link.nu
+            #mu = v/tau
+            #sigma2 = 1./tau
+            #a = np.sqrt(1 + sigma2/(nu**2))
+            #z = mu/a
+            #return -1.0*np.sum((1.0/self.gp_link.transf(z))*self.gp_link.dtransf_df(z)*nu*z/(sigma2+nu**2))
+        #else:
+            #return super(Binomial, self).ep_gradients(Y, tau, v, Y_metadata=Y_metadata, gh_points=gh_points, boost_grad=boost_grad, dL_dKdiag=dL_dKdiag)
   
     def variational_expectations(self, Y, m, v, gh_points=None, Y_metadata=None):
         if isinstance(self.gp_link, link_functions.Probit):

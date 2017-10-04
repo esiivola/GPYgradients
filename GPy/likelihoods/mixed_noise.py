@@ -157,9 +157,9 @@ class MixedNoise(Likelihood):
         if ind.shape[0]==1:
             ind = ind[0]*np.ones(f.shape[0])
             y = y*np.ones(f.shape)
-        lpdf = np.zeros( (f.size))
+        lpdf = np.zeros( (f.size,1))
         for j in outputs:
-            lpdf[ind==j] = self.likelihoods_list[j].logpdf(f[ind==j,:], y[ind==j,:], Y_metadata=None)
+            lpdf[np.where(ind==j)[0],:] = self.likelihoods_list[j].logpdf(f[np.where(ind==j)[0],:], y[np.where(ind==j)[0],:], Y_metadata=None)
         return lpdf
 
     def dlogpdf_dtheta(self, f, y, Y_metadata=None):

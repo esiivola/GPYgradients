@@ -89,7 +89,6 @@ class Likelihood(Parameterized):
 
         .. math:
             p(y_{*}|D) = p(y_{*}|f_{*})p(f_{*}|\mu_{*}\\sigma^{2}_{*})
-
         :param y_test: test observations (y_{*})
         :type y_test: (Nx1) array
         :param mu_star: predictive mean of gaussian p(f_{*}|mu_{*}, var_{*})
@@ -104,7 +103,7 @@ class Likelihood(Parameterized):
         flat_y_test = y_test.flatten()
         flat_mu_star = mu_star.flatten()
         flat_var_star = var_star.flatten()
-
+        
         if Y_metadata is not None:
             #Need to zip individual elements of Y_metadata aswell
             Y_metadata_flat = {}
@@ -145,7 +144,6 @@ class Likelihood(Parameterized):
                 return res
 
             return f
-
         p_ystar, _ = zip(*[quad(integral_generator(yi, mi, vi, yi_m), -np.inf, np.inf)
                            for yi, mi, vi, yi_m in zipped_values])
         p_ystar = np.array(p_ystar).reshape(*y_test.shape)
