@@ -1262,8 +1262,8 @@ class HalfT(Prior):
         above_zero = theta > 1e-6
         v = self.nu
         sigma2 = self.A
-        if(above_zero.shape[0]>1):
-            grad[above_zero] = -0.5*(v+1)*(2*theta[above_zero])/(v*sigma2 + theta[above_zero][0]**2)
+        if(above_zero.shape[0]>0):
+            grad[above_zero] = -0.5*(v+1)*(2*theta[above_zero])/(v*sigma2 + theta[above_zero]**2)
         return grad
 
     def rvs(self, n):
