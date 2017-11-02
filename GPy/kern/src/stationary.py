@@ -705,8 +705,8 @@ class Matern52(Stationary):
         return self.variance*(1+np.sqrt(5.)*r+5./3*r**2)*np.exp(-np.sqrt(5.)*r)
 
     def dK_dr(self, r):
-        return self.variance*(10./3*r -5.*r -5.*np.sqrt(5.)/3*r**2)*np.exp(-np.sqrt(5.)*r)
-
+        return -self.variance*5./3*(np.sqrt(5)*r +1)*np.exp(-np.sqrt(5.)*r)
+        
     def dK_dvariance(self, r):
         return (1+np.sqrt(5.)*r+5./3*r**2)*np.exp(-np.sqrt(5.)*r)
 
@@ -717,7 +717,7 @@ class Matern52(Stationary):
         return -5./3. *self.variance 
 
     def dK2_dvariancedr(self, r):
-        return (10./3*r -5.*r -5.*np.sqrt(5.)/3*r**2)*np.exp(-np.sqrt(5.)*r)
+        return 5./3*(np.sqrt(5) +1)*np.exp(-np.sqrt(5.)*r)
     
     def dK3_drdrdr(self, r):
         return -25./3.*np.exp(-np.sqrt(5.)*r)*r*(np.sqrt(5.)*r - 3.)*self.variance

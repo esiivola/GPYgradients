@@ -151,8 +151,10 @@ class Binomial(Likelihood):
         np.testing.assert_array_equal(N.shape, y.shape)
 
         nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
-        t1 = y*np.log(inv_link_f)  if y>0 else 0.
-        t2 = (N-y)*np.log(1.-inv_link_f) if N-y>0 else 0.
+        t1 = np.zeros(y.shape)
+        t1 = y[y>0]*np.log(inv_link_f[y>0])
+        t2 = np.zeros(y.shape)
+        t2 = (N-y)[N-y>0]*np.log(1.-inv_link_f[N-y>0])
         return nchoosey + t1 + t2
 
         #nchoosey = special.gammaln(N+1) - special.gammaln(y+1) - special.gammaln(N-y+1)
