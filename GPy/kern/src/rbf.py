@@ -86,6 +86,22 @@ class RBF(Stationary):
         return self.K(X,X2)/self.variance
     
     @Cache_this(limit=3, ignore_args=())
+    def dK_dlengthscale(self,X,X2):
+        r = self._scaled_dist(X, X2)
+        K = self.K_of_r(r)
+        if X2 is None:
+            X2=X
+        dist = X[:,None,:]-X2[None,:,:]
+        lengthscaleinv = np.ones((X.shape[1]))/(self.lengthscale)
+        if self.ARD:
+            g = []
+            for diml in range(X.shape[1]):
+                g += [ (dist[:,:,dimX]**2)*(lengthscaleinv[diml]**3)*K]
+        else:
+            g = np.sum(dist**2, axis=2)*(lengthscaleinv[0]**3)*K
+        return g
+    
+    @Cache_this(limit=3, ignore_args=())
     def dK2_dvariancedX(self, X, X2, dim):
         return self.dK_dX(X,X2, dim)/self.variance
     
